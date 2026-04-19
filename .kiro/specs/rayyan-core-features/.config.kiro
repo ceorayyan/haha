@@ -1,1 +1,6 @@
-{"specId": "4e5f308f-973a-4ca4-bfca-f5308ad2a981", "workflowType": "design-first", "specType": "feature"}
+{
+  "specType": "feature",
+  "workflowType": "design-first",
+  "featureName": "rayyan-core-features",
+  "createdAt": "2026-04-19"
+}

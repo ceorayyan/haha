@@ -59,10 +59,46 @@ export interface User {
   };
 }
 
+export interface ScreeningCriteria {
+  id: number;
+  reviewId: number;
+  type: 'inclusion' | 'exclusion';
+  criteria: string;
+  description?: string;
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface BlindModeState {
+  enabled: boolean;
+  hiddenFields: string[];
+}
+
+export interface ScreeningSummary {
+  reviewId: number;
+  totalArticles: number;
+  screened: number;
+  unscreened: number;
+  conflicts: number;
+  confirmations: number;
+  progressPercentage: number;
+  teamProgress: TeamMemberProgress[];
+}
+
+export interface TeamMemberProgress {
+  memberId: number;
+  memberName: string;
+  screened: number;
+  conflicts: number;
+  confirmations: number;
+}
+
 interface DataContextType {
   reviews: Review[];
   articles: Article[];
   user: User;
+  screeningCriteria: ScreeningCriteria[];
+  blindMode: BlindModeState;
   getReviewById: (id: number) => Review | undefined;
   getArticlesByReviewId: (reviewId: number) => Article[];
   getArticleById: (id: number) => Article | undefined;
@@ -71,6 +107,12 @@ interface DataContextType {
   deleteReview: (id: number) => void;
   updateReview: (id: number, updates: Partial<Review>) => void;
   addMemberToReview: (reviewId: number, member: Omit<Member, "id">) => void;
+  addScreeningCriteria: (reviewId: number, type: 'inclusion' | 'exclusion', criteria: string, createdBy: string, description?: string) => void;
+  deleteScreeningCriteria: (id: number) => void;
+  updateScreeningCriteria: (id: number, updates: Partial<ScreeningCriteria>) => void;
+  getReviewCriteria: (reviewId: number) => ScreeningCriteria[];
+  toggleBlindMode: () => void;
+  getScreeningSummary: (reviewId: number) => ScreeningSummary;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -79,6 +121,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
+  const [screeningCriteria, setScreeningCriteria] = useState<ScreeningCriteria[]>([]);
+  const [blindMode, setBlindMode] = useState<BlindModeState>({ enabled: false, hiddenFields: [] });
   const [user] = useState<User>(mockData.user);
 
   // Load data from localStorage or use mock data
@@ -94,6 +138,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     const savedReviews = localStorage.getItem("reviews");
     const savedArticles = localStorage.getItem("articles");
+    const savedScreeningCriteria = localStorage.getItem("screeningCriteria");
+    const savedBlindMode = localStorage.getItem("blindMode");
 
     if (savedReviews) {
       setReviews(JSON.parse(savedReviews));
@@ -105,6 +151,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setArticles(JSON.parse(savedArticles));
     } else {
       setArticles(mockData.articles as Article[]);
+    }
+
+    if (savedScreeningCriteria) {
+      setScreeningCriteria(JSON.parse(savedScreeningCriteria));
+    } else {
+      setScreeningCriteria(mockData.screeningCriteria as ScreeningCriteria[] || []);
+    }
+
+    if (savedBlindMode) {
+      setBlindMode(JSON.parse(savedBlindMode));
+    } else {
+      setBlindMode({ enabled: false, hiddenFields: ['reviewer_name', 'reviewer_avatar', 'reviewer_email'] });
     }
   }, [mounted]);
 
@@ -118,6 +176,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!mounted || articles.length === 0) return;
     localStorage.setItem("articles", JSON.stringify(articles));
   }, [articles, mounted]);
+
+  useEffect(() => {
+    if (!mounted || screeningCriteria.length === 0) return;
+    localStorage.setItem("screeningCriteria", JSON.stringify(screeningCriteria));
+  }, [screeningCriteria, mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    localStorage.setItem("blindMode", JSON.stringify(blindMode));
+  }, [blindMode, mounted]);
 
   const getReviewById = (id: number) => {
     return reviews.find((r) => r.id === id);
@@ -197,12 +265,84 @@ export function DataProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  const addScreeningCriteria = (
+    reviewId: number,
+    type: 'inclusion' | 'exclusion',
+    criteria: string,
+    createdBy: string,
+    description?: string
+  ) => {
+    const newCriteria: ScreeningCriteria = {
+      id: Math.max(...screeningCriteria.map((c) => c.id), 0) + 1,
+      reviewId,
+      type,
+      criteria,
+      description,
+      createdAt: new Date().toISOString(),
+      createdBy,
+    };
+    setScreeningCriteria((prev) => [...prev, newCriteria]);
+  };
+
+  const deleteScreeningCriteria = (id: number) => {
+    setScreeningCriteria((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const updateScreeningCriteria = (id: number, updates: Partial<ScreeningCriteria>) => {
+    setScreeningCriteria((prev) =>
+      prev.map((criteria) =>
+        criteria.id === id ? { ...criteria, ...updates } : criteria
+      )
+    );
+  };
+
+  const getReviewCriteria = (reviewId: number) => {
+    return screeningCriteria.filter((c) => c.reviewId === reviewId);
+  };
+
+  const toggleBlindMode = () => {
+    setBlindMode((prev) => ({
+      ...prev,
+      enabled: !prev.enabled,
+    }));
+  };
+
+  const getScreeningSummary = (reviewId: number): ScreeningSummary => {
+    const reviewArticles = getArticlesByReviewId(reviewId);
+    const screened = reviewArticles.filter((a) => a.screeningDecision !== null).length;
+    const unscreened = reviewArticles.length - screened;
+    const progressPercentage = reviewArticles.length > 0 ? (screened / reviewArticles.length) * 100 : 0;
+
+    // Calculate team progress
+    const review = getReviewById(reviewId);
+    const teamProgress: TeamMemberProgress[] = review?.members.map((member) => ({
+      memberId: member.id,
+      memberName: member.name,
+      screened: 0,
+      conflicts: 0,
+      confirmations: 0,
+    })) || [];
+
+    return {
+      reviewId,
+      totalArticles: reviewArticles.length,
+      screened,
+      unscreened,
+      conflicts: 0,
+      confirmations: 0,
+      progressPercentage,
+      teamProgress,
+    };
+  };
+
   return (
     <DataContext.Provider
       value={{
         reviews,
         articles,
         user,
+        screeningCriteria,
+        blindMode,
         getReviewById,
         getArticlesByReviewId,
         getArticleById,
@@ -211,6 +351,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         deleteReview,
         updateReview,
         addMemberToReview,
+        addScreeningCriteria,
+        deleteScreeningCriteria,
+        updateScreeningCriteria,
+        getReviewCriteria,
+        toggleBlindMode,
+        getScreeningSummary,
       }}
     >
       {children}

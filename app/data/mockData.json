@@ -122,5 +122,56 @@
     "preferences": {
       "theme": "light"
     }
+  },
+  "screeningCriteria": [
+    {
+      "id": 1,
+      "reviewId": 1,
+      "type": "inclusion",
+      "criteria": "Published in peer-reviewed journals",
+      "description": "Only include studies published in recognized peer-reviewed journals",
+      "createdAt": "2024-01-15T10:30:00Z",
+      "createdBy": "Rayyan Ahmed"
+    },
+    {
+      "id": 2,
+      "reviewId": 1,
+      "type": "inclusion",
+      "criteria": "Published after 2020",
+      "description": "Only include studies published in 2020 or later",
+      "createdAt": "2024-01-15T10:35:00Z",
+      "createdBy": "Rayyan Ahmed"
+    },
+    {
+      "id": 3,
+      "reviewId": 1,
+      "type": "inclusion",
+      "criteria": "English language",
+      "description": "Only include studies published in English",
+      "createdAt": "2024-01-15T10:40:00Z",
+      "createdBy": "Rayyan Ahmed"
+    },
+    {
+      "id": 4,
+      "reviewId": 1,
+      "type": "exclusion",
+      "criteria": "Opinion pieces or editorials",
+      "description": "Exclude opinion pieces, editorials, and commentary articles",
+      "createdAt": "2024-01-15T10:45:00Z",
+      "createdBy": "Rayyan Ahmed"
+    },
+    {
+      "id": 5,
+      "reviewId": 1,
+      "type": "exclusion",
+      "criteria": "Case reports with fewer than 10 cases",
+      "description": "Exclude case reports with fewer than 10 cases",
+      "createdAt": "2024-01-15T10:50:00Z",
+      "createdBy": "Rayyan Ahmed"
+    }
+  ],
+  "blindMode": {
+    "enabled": false,
+    "hiddenFields": ["reviewer_name", "reviewer_avatar", "reviewer_email"]
   }
 }
