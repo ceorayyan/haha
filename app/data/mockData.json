@@ -1,0 +1,126 @@
+{
+  "reviews": [
+    {
+      "id": 1,
+      "title": "Amet error non poss",
+      "dateCreated": "2026-04-18",
+      "owner": "Rayyan Ahmed",
+      "type": "Systematic Review",
+      "domain": "Biomedical",
+      "description": "Omnis odit sed nostr",
+      "articles": 10,
+      "members": [
+        {
+          "id": 1,
+          "name": "Rayyan Ahmed",
+          "email": "rayyan2409@zestechonge.com",
+          "role": "Owner",
+          "status": "Active",
+          "avatar": "R"
+        }
+      ],
+      "stats": {
+        "importedReferences": 10,
+        "totalDuplicates": 0,
+        "unresolved": 0,
+        "resolved": 0,
+        "notDuplicate": 0,
+        "deleted": 0
+      }
+    }
+  ],
+  "articles": [
+    {
+      "id": 1,
+      "reviewId": 1,
+      "title": "The Impact of Climate Change on Biodiversity",
+      "authors": "Smith J, Johnson M, Williams K",
+      "year": 2023,
+      "journal": "Nature Climate Change",
+      "keywords": ["climate change", "biodiversity", "conservation"],
+      "abstract": "This study examines the effects of climate change on global biodiversity patterns. Our research indicates significant shifts in species distribution and ecosystem dynamics across multiple continents.",
+      "fullText": "Introduction\n\nClimate change represents one of the most pressing challenges facing global biodiversity. This comprehensive study examines the multifaceted impacts of rising temperatures, altered precipitation patterns, and extreme weather events on species distribution and ecosystem function.\n\nMethods\n\nWe conducted a meta-analysis of 500 peer-reviewed studies published between 2015 and 2023, covering terrestrial, marine, and freshwater ecosystems across all continents.\n\nResults\n\nOur findings reveal that 68% of studied species have shown measurable range shifts, with poleward movements averaging 16.9 km per decade. Marine species demonstrated the most rapid responses, while terrestrial mammals showed more complex patterns influenced by habitat fragmentation.\n\nDiscussion\n\nThe observed biodiversity changes have profound implications for ecosystem services, conservation strategies, and human well-being. Urgent action is needed to mitigate further impacts and support ecosystem resilience.\n\nConclusion\n\nClimate change continues to reshape global biodiversity patterns at unprecedented rates, requiring adaptive management strategies and international cooperation.",
+      "status": "included",
+      "screeningDecision": "include",
+      "screeningNotes": "Highly relevant to research question. Strong methodology and comprehensive data."
+    },
+    {
+      "id": 2,
+      "reviewId": 1,
+      "title": "Machine Learning Applications in Healthcare",
+      "authors": "Brown A, Davis R",
+      "year": 2024,
+      "journal": "Journal of Medical AI",
+      "keywords": ["machine learning", "healthcare", "diagnosis"],
+      "abstract": "We present a comprehensive review of machine learning applications in modern healthcare, focusing on diagnostic accuracy, treatment optimization, and patient outcome prediction.",
+      "fullText": "Abstract\n\nMachine learning has revolutionized healthcare delivery, offering unprecedented capabilities in diagnosis, treatment planning, and outcome prediction.\n\n1. Introduction\n\nThe integration of artificial intelligence and machine learning in healthcare has accelerated dramatically over the past decade, driven by advances in computational power, algorithm development, and data availability.\n\n2. Diagnostic Applications\n\nML algorithms have demonstrated remarkable accuracy in medical imaging analysis, achieving performance comparable to or exceeding human experts in radiology, pathology, and dermatology.\n\n3. Treatment Optimization\n\nPersonalized medicine approaches leveraging ML enable tailored treatment strategies based on individual patient characteristics, genetic profiles, and treatment response patterns.\n\n4. Challenges and Future Directions\n\nDespite promising results, challenges remain in model interpretability, data privacy, regulatory approval, and clinical integration.\n\n5. Conclusion\n\nMachine learning represents a transformative force in healthcare, with continued research needed to address implementation barriers and maximize clinical impact.",
+      "status": "undecided",
+      "screeningDecision": null,
+      "screeningNotes": ""
+    },
+    {
+      "id": 3,
+      "reviewId": 1,
+      "title": "Sustainable Urban Development Strategies",
+      "authors": "Garcia M, Martinez L, Rodriguez P",
+      "year": 2023,
+      "journal": "Urban Studies",
+      "keywords": ["sustainability", "urban planning", "development"],
+      "abstract": "This paper explores sustainable strategies for urban development in the 21st century, examining case studies from cities worldwide and identifying best practices for environmental, social, and economic sustainability.",
+      "fullText": "Introduction\n\nUrban areas house over 55% of the global population, a figure projected to reach 68% by 2050. Sustainable urban development has become imperative for addressing climate change, resource scarcity, and social equity.\n\nMethodology\n\nWe analyzed 50 cities across six continents, evaluating their sustainability initiatives across multiple dimensions including energy, transportation, waste management, green spaces, and social inclusion.\n\nKey Findings\n\nSuccessful cities demonstrate integrated approaches combining technological innovation, policy frameworks, community engagement, and long-term planning. Green infrastructure, renewable energy adoption, and circular economy principles emerged as critical success factors.\n\nCase Studies\n\nCopenhagen's carbon neutrality goals, Singapore's vertical gardens, and Curitiba's bus rapid transit system exemplify innovative approaches to urban sustainability challenges.\n\nConclusions\n\nSustainable urban development requires holistic strategies that balance environmental protection, economic vitality, and social equity. International knowledge sharing and local adaptation are essential for scaling successful models.",
+      "status": "excluded",
+      "screeningDecision": "exclude",
+      "screeningNotes": "Not directly relevant to primary research question. Focus is on urban planning rather than core topic."
+    },
+    {
+      "id": 4,
+      "reviewId": 1,
+      "title": "Novel Approaches to Cancer Treatment Using Immunotherapy",
+      "authors": "Anderson K, Thompson R, White S",
+      "year": 2024,
+      "journal": "Oncology Research",
+      "keywords": ["cancer", "immunotherapy", "treatment"],
+      "abstract": "This study presents novel immunotherapy approaches for treating various types of cancer. We conducted a comprehensive analysis of 500 patients over a 3-year period, demonstrating significant improvements in survival rates.",
+      "fullText": "Abstract\n\nImmunotherapy has emerged as a revolutionary approach to cancer treatment, harnessing the body's immune system to target and destroy cancer cells.\n\nIntroduction\n\nTraditional cancer treatments including chemotherapy and radiation therapy have significant limitations and side effects. Immunotherapy offers a more targeted approach with potentially fewer adverse effects.\n\nMethods\n\nWe conducted a multi-center clinical trial involving 500 patients with various cancer types, including melanoma, lung cancer, and lymphoma. Patients received checkpoint inhibitor therapy combined with personalized vaccine approaches.\n\nResults\n\nOverall survival rates improved by 35% compared to standard treatment protocols. Response rates varied by cancer type, with melanoma showing the highest response (62%) and pancreatic cancer the lowest (18%).\n\nDiscussion\n\nOur findings demonstrate the potential of combination immunotherapy approaches. Biomarker identification for patient selection remains crucial for optimizing treatment outcomes.\n\nConclusion\n\nImmunotherapy represents a paradigm shift in cancer treatment, with continued research needed to expand its applicability and improve response rates across all cancer types.",
+      "status": "undecided",
+      "screeningDecision": null,
+      "screeningNotes": ""
+    },
+    {
+      "id": 5,
+      "reviewId": 1,
+      "title": "Artificial Intelligence in Medical Diagnosis: A Systematic Review",
+      "authors": "Chen L, Kumar P, Singh M",
+      "year": 2023,
+      "journal": "AI in Medicine",
+      "keywords": ["AI", "diagnosis", "machine learning"],
+      "abstract": "We systematically reviewed the application of artificial intelligence in medical diagnosis across multiple specialties. Our findings suggest significant improvements in diagnostic accuracy when AI is used as a decision support tool.",
+      "fullText": "Abstract\n\nArtificial intelligence has shown remarkable promise in enhancing diagnostic accuracy across medical specialties.\n\n1. Background\n\nDiagnostic errors contribute to significant morbidity and mortality. AI-powered diagnostic tools offer potential solutions by augmenting physician decision-making.\n\n2. Methods\n\nSystematic review of 250 studies published 2018-2023, covering radiology, pathology, dermatology, ophthalmology, and cardiology.\n\n3. Results\n\nAI systems achieved diagnostic accuracy ranging from 85-98% across specialties, with highest performance in image-based diagnoses. Integration with clinical workflows improved physician accuracy by 12-25%.\n\n4. Challenges\n\nData quality, algorithm bias, regulatory approval, and clinical integration remain significant barriers to widespread adoption.\n\n5. Future Directions\n\nMultimodal AI systems integrating imaging, laboratory, and clinical data show promise for comprehensive diagnostic support.\n\n6. Conclusion\n\nAI represents a powerful tool for enhancing diagnostic accuracy, requiring careful validation and integration into clinical practice.",
+      "status": "undecided",
+      "screeningDecision": null,
+      "screeningNotes": ""
+    },
+    {
+      "id": 6,
+      "reviewId": 1,
+      "title": "The Role of Gut Microbiome in Mental Health",
+      "authors": "Miller J, Davis A, Wilson B",
+      "year": 2024,
+      "journal": "Neuroscience Today",
+      "keywords": ["microbiome", "mental health", "gut-brain axis"],
+      "abstract": "Recent research has highlighted the connection between gut microbiome composition and mental health outcomes. This paper explores the mechanisms underlying this relationship and potential therapeutic implications.",
+      "fullText": "Introduction\n\nThe gut-brain axis represents a bidirectional communication system between the gastrointestinal tract and the central nervous system, with the gut microbiome playing a crucial mediating role.\n\nBackground\n\nEmerging evidence suggests that gut microbiome composition influences neurotransmitter production, immune function, and inflammatory responses, all of which impact mental health.\n\nMethods\n\nWe conducted a comprehensive review of 180 studies examining relationships between microbiome composition and various mental health conditions including depression, anxiety, and schizophrenia.\n\nFindings\n\nSignificant associations were found between microbiome diversity and mental health outcomes. Specific bacterial strains showed consistent correlations with symptom severity across multiple studies.\n\nMechanisms\n\nProposed mechanisms include neurotransmitter synthesis, vagal nerve signaling, immune modulation, and metabolite production affecting brain function.\n\nTherapeutic Implications\n\nProbiotics, prebiotics, and dietary interventions show promise as adjunct treatments for mental health conditions, though more rigorous clinical trials are needed.\n\nConclusion\n\nThe gut microbiome represents a novel therapeutic target for mental health interventions, requiring further research to establish causality and optimize treatment approaches.",
+      "status": "undecided",
+      "screeningDecision": null,
+      "screeningNotes": ""
+    }
+  ],
+  "user": {
+    "name": "User",
+    "email": "user@example.com",
+    "avatar": "U",
+    "preferences": {
+      "theme": "light"
+    }
+  }
+}
