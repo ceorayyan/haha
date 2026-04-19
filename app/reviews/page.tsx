@@ -8,8 +8,8 @@ import { useData } from "../context/DataContext";
 
 type ModalStep = 1 | 2 | 3;
 
-const inputCls = "w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 text-xs rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-gray-500";
-const selectCls = "w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-xs rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-gray-500";
+const inputCls = "w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 text-xs rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-gray-500";
+const selectCls = "w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-xs rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-gray-500";
 
 function StepIndicator({ step }: { step: ModalStep }) {
   const steps = [
@@ -18,7 +18,7 @@ function StepIndicator({ step }: { step: ModalStep }) {
     { n: 3, label: "Invite Members" },
   ];
   return (
-    <div className="flex items-center px-6 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+    <div className="flex items-center px-6 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-black">
       {steps.map((s, i) => (
         <div key={s.n} className="flex items-center">
           {i > 0 && <svg className="w-3 h-3 text-gray-300 dark:text-gray-600 mx-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>}
@@ -63,7 +63,7 @@ export default function ReviewsPage() {
   const formatDate = (d: string) => new Date(d).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex h-screen bg-gray-50 dark:bg-black">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
@@ -82,9 +82,9 @@ export default function ReviewsPage() {
               </button>
             </div>
 
-            <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
+            <div className="bg-white dark:bg-black rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
               <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                <thead className="bg-gray-50 dark:bg-black border-b border-gray-200 dark:border-gray-700">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Title</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Date Created</th>
@@ -112,7 +112,7 @@ export default function ReviewsPage() {
                         {openMenuId === review.id && (
                           <>
                             <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
-                            <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-20">
+                            <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-20">
                               <button onClick={() => { if (confirm("Delete this review?")) { deleteReview(review.id); setOpenMenuId(null); } }} className="w-full px-4 py-2.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors">Delete Review</button>
                             </div>
                           </>
@@ -130,7 +130,7 @@ export default function ReviewsPage() {
       {/* Create Review Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-900 rounded-lg w-full max-w-2xl shadow-xl">
+          <div className="bg-white dark:bg-black rounded-lg w-full max-w-2xl shadow-xl">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2">

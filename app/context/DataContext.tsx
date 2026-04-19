@@ -168,17 +168,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // Save to localStorage whenever data changes
   useEffect(() => {
-    if (!mounted || reviews.length === 0) return;
+    if (!mounted) return;
     localStorage.setItem("reviews", JSON.stringify(reviews));
   }, [reviews, mounted]);
 
   useEffect(() => {
-    if (!mounted || articles.length === 0) return;
+    if (!mounted) return;
     localStorage.setItem("articles", JSON.stringify(articles));
   }, [articles, mounted]);
 
   useEffect(() => {
-    if (!mounted || screeningCriteria.length === 0) return;
+    if (!mounted) return;
     localStorage.setItem("screeningCriteria", JSON.stringify(screeningCriteria));
   }, [screeningCriteria, mounted]);
 

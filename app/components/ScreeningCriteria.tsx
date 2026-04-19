@@ -45,7 +45,7 @@ export default function ScreeningCriteria({
     <div className="flex-1">
       <div className="mb-3">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">{title}</h3>
-        <span className="inline-block bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs px-2 py-1 rounded">
+        <span className="inline-block bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 text-xs px-2 py-1 rounded">
           {items.length} criteria
         </span>
       </div>
@@ -53,7 +53,7 @@ export default function ScreeningCriteria({
         {items.map((item) => (
           <div
             key={item.id}
-            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex items-start justify-between hover:shadow-sm transition-shadow"
+            className="bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex items-start justify-between hover:shadow-sm transition-shadow"
           >
             <div className="flex-1">
               <p className="text-sm font-medium text-gray-900 dark:text-white">{item.criteria}</p>
@@ -91,7 +91,7 @@ export default function ScreeningCriteria({
   );
 
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden shadow-sm">
+    <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden shadow-sm">
       <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Screening Criteria</h2>
       </div>
@@ -103,7 +103,7 @@ export default function ScreeningCriteria({
       {/* Add Criteria Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-lg w-full max-w-md shadow-xl border border-gray-200 dark:border-gray-800">
+          <div className="bg-white dark:bg-black rounded-lg w-full max-w-md shadow-xl border border-gray-200 dark:border-gray-800">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
               <span className="text-sm font-semibold text-gray-900 dark:text-white">
                 Add {addType === 'inclusion' ? 'Inclusion' : 'Exclusion'} Criteria
@@ -127,7 +127,7 @@ export default function ScreeningCriteria({
                   value={newCriteria}
                   onChange={(e) => setNewCriteria(e.target.value)}
                   placeholder="Enter criteria text"
-                  className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-colors"
+                  className="w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-colors"
                 />
               </div>
               <div>
@@ -139,7 +139,7 @@ export default function ScreeningCriteria({
                   onChange={(e) => setNewDescription(e.target.value)}
                   placeholder="Enter description"
                   rows={3}
-                  className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-colors resize-none"
+                  className="w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-colors resize-none"
                 />
               </div>
             </div>

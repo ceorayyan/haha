@@ -17,7 +17,7 @@ export default function ScreeningSummary({
   onStartScreening,
 }: ScreeningSummaryProps) {
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden shadow-sm">
+    <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden shadow-sm">
       <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Screening Summary</h2>
       </div>

@@ -13,7 +13,7 @@ export default function Header({ onMenuClick, title = "Rayyan", showTitle = true
   const { user, blindMode, toggleBlindMode } = useData();
 
   return (
-    <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 h-12 flex items-center px-4 gap-3 shrink-0">
+    <header className="bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 h-12 flex items-center px-4 gap-3 shrink-0">
       {/* Menu Button */}
       <button
         onClick={onMenuClick}

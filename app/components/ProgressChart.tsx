@@ -18,7 +18,7 @@ export default function ProgressChart({
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 flex flex-col items-center justify-center">
+    <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg p-6 flex flex-col items-center justify-center">
       <div className="relative w-32 h-32 mb-4">
         <svg className="w-full h-full transform -rotate-90" viewBox="0 0 120 120">
           {/* Background circle */}
