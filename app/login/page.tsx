@@ -3,17 +3,39 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import api from "../../lib/api";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // For demo purposes, redirect to reviews page
-    router.push("/reviews");
+    setError("");
+    setLoading(true);
+
+    try {
+      await api.login({ 
+        email: email.toLowerCase().trim(), 
+        password 
+      });
+      router.push("/reviews");
+    } catch (err: any) {
+      // Handle specific error messages
+      if (err.message.includes('Too many')) {
+        setError(err.message);
+      } else if (err.message.includes('credentials')) {
+        setError("Invalid email or password");
+      } else {
+        setError("Login failed. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -39,6 +61,13 @@ export default function LoginPage() {
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Error Message */}
+            {error && (
+              <div className="bg-red-500/10 border border-red-500 text-red-500 px-4 py-3 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
             {/* Email */}
             <div>
               <label
@@ -109,9 +138,10 @@ export default function LoginPage() {
             {/* Submit */}
             <button
               type="submit"
-              className="w-full bg-white text-black font-semibold rounded-lg py-2.5 text-sm hover:bg-zinc-200 active:bg-zinc-300 transition mt-2"
+              disabled={loading}
+              className="w-full bg-white text-black font-semibold rounded-lg py-2.5 text-sm hover:bg-zinc-200 active:bg-zinc-300 transition mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Sign in
+              {loading ? "Signing in..." : "Sign in"}
             </button>
           </form>
 
@@ -146,7 +176,7 @@ export default function LoginPage() {
         <p className="text-center text-zinc-600 text-sm mt-6">
           Don&apos;t have an account?{" "}
           <Link href="/signup" className="text-white font-medium hover:underline">
-            Sign up
+            Contact admin to create account
           </Link>
         </p>
       </div>

@@ -31,59 +31,59 @@
 ### Phase 4: Screening Tab Enhancement
 
 - [-] 4.1 Add ScreeningCriteria component to screening tab
-- [~] 4.2 Add ScreeningSummary component to screening tab
-- [~] 4.3 Integrate criteria display with article screening
-- [~] 4.4 Update article screening area layout
-- [~] 4.5 Add undecided articles list
-- [~] 4.6 Implement blind mode filtering in screening tab
+- [ ] 4.2 Add ScreeningSummary component to screening tab
+- [ ] 4.3 Integrate criteria display with article screening
+- [ ] 4.4 Update article screening area layout
+- [ ] 4.5 Add undecided articles list
+- [ ] 4.6 Implement blind mode filtering in screening tab
 
 ### Phase 5: Overview Tab Enhancement
 
-- [~] 5.1 Add blind mode status indicator to overview
-- [~] 5.2 Add screening criteria summary to overview
-- [~] 5.3 Update review info display
-- [~] 5.4 Update data summary display
-- [~] 5.5 Update review members display with blind mode support
+- [ ] 5.1 Add blind mode status indicator to overview
+- [ ] 5.2 Add screening criteria summary to overview
+- [ ] 5.3 Update review info display
+- [ ] 5.4 Update data summary display
+- [ ] 5.5 Update review members display with blind mode support
 
 ### Phase 6: Data Extraction Removal
 
-- [~] 6.1 Remove data extraction tab from navigation
+- [ ] 6.1 Remove data extraction tab from navigation
 - [x] 6.2 Delete app/reviews/[id]/data/page.tsx
 - [x] 6.3 Remove data extraction related mock data
-- [~] 6.4 Remove data extraction related context methods
-- [~] 6.5 Update tab navigation component
-- [~] 6.6 Test all remaining tabs work correctly
+- [ ] 6.4 Remove data extraction related context methods
+- [ ] 6.5 Update tab navigation component
+- [ ] 6.6 Test all remaining tabs work correctly
 
 ### Phase 7: Styling & Theme
 
-- [~] 7.1 Style ScreeningCriteria component with dark theme
-- [~] 7.2 Style ScreeningSummary component with dark theme
-- [~] 7.3 Style ProgressChart component
-- [~] 7.4 Style QuickGuide component
-- [~] 7.5 Style TeamProgress component
-- [~] 7.6 Ensure responsive design on all screen sizes
-- [~] 7.7 Verify color contrast and accessibility
+- [ ] 7.1 Style ScreeningCriteria component with dark theme
+- [ ] 7.2 Style ScreeningSummary component with dark theme
+- [ ] 7.3 Style ProgressChart component
+- [ ] 7.4 Style QuickGuide component
+- [ ] 7.5 Style TeamProgress component
+- [ ] 7.6 Ensure responsive design on all screen sizes
+- [ ] 7.7 Verify color contrast and accessibility
 
 ### Phase 8: Integration & Testing
 
-- [~] 8.1 Test screening criteria add/delete functionality
-- [~] 8.2 Test blind mode toggle functionality
-- [~] 8.3 Test screening summary calculations
-- [~] 8.4 Test data persistence in localStorage
-- [~] 8.5 Test blind mode affects all tabs
-- [~] 8.6 Test responsive design on mobile/tablet/desktop
-- [~] 8.7 Test keyboard navigation
-- [~] 8.8 Test accessibility with screen reader
+- [ ] 8.1 Test screening criteria add/delete functionality
+- [ ] 8.2 Test blind mode toggle functionality
+- [ ] 8.3 Test screening summary calculations
+- [ ] 8.4 Test data persistence in localStorage
+- [ ] 8.5 Test blind mode affects all tabs
+- [ ] 8.6 Test responsive design on mobile/tablet/desktop
+- [ ] 8.7 Test keyboard navigation
+- [ ] 8.8 Test accessibility with screen reader
 
 ### Phase 9: Polish & Optimization
 
-- [~] 9.1 Optimize component re-renders
-- [~] 9.2 Add loading states where needed
-- [~] 9.3 Add error handling
-- [~] 9.4 Add success notifications
-- [~] 9.5 Verify no console errors
-- [~] 9.6 Performance testing
-- [~] 9.7 Final UI/UX review
+- [ ] 9.1 Optimize component re-renders
+- [ ] 9.2 Add loading states where needed
+- [ ] 9.3 Add error handling
+- [ ] 9.4 Add success notifications
+- [ ] 9.5 Verify no console errors
+- [ ] 9.6 Performance testing
+- [ ] 9.7 Final UI/UX review
 
 ## Detailed Task Breakdown
 

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
-import { useData } from "../context/DataContext";
+import ProtectedRoute from "../components/ProtectedRoute";
+import api from "../../lib/api";
 
 type ModalStep = 1 | 2 | 3;
 
@@ -35,34 +36,226 @@ function StepIndicator({ step }: { step: ModalStep }) {
 }
 
 export default function ReviewsPage() {
-  const { reviews, createReview, deleteReview, user } = useData();
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [step, setStep] = useState<ModalStep>(1);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [inviting, setInviting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [form, setForm] = useState({ title: "", type: "", domain: "", description: "", dateCreated: new Date().toISOString().split("T")[0], owner: user.name });
+  const [form, setForm] = useState({ 
+    title: "", 
+    type: "", 
+    domain: "", 
+    description: "", 
+  });
   const [inviteEmails, setInviteEmails] = useState("");
   const [inviteRole, setInviteRole] = useState("");
   const [inviteMsg, setInviteMsg] = useState("");
+  const [currentReviewId, setCurrentReviewId] = useState<number | null>(null);
+
+  // Fetch reviews on mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const userData = api.getStoredUser();
+        setUser(userData);
+
+        const reviewsData = await api.getReviews();
+        // Ensure reviews is always an array
+        const reviewsArray = Array.isArray(reviewsData) ? reviewsData : (reviewsData?.data || []);
+        setReviews(reviewsArray);
+      } catch (error) {
+        console.error("Failed to fetch reviews:", error);
+        setReviews([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const createReview = async (reviewData: any) => {
+    try {
+      const newReview = await api.createReview(reviewData);
+      // Add to the beginning of the array (top of the list)
+      setReviews(prev => [newReview, ...prev]);
+      setCurrentReviewId(newReview.id);
+      return newReview;
+    } catch (error) {
+      console.error("Failed to create review:", error);
+      alert("Failed to create review. Please try again.");
+      return null;
+    }
+  };
+
+  const uploadArticles = async (reviewId: number) => {
+    if (selectedFiles.length === 0) {
+      handleSkip();
+      return;
+    }
+
+    setUploading(true);
+    try {
+      let successCount = 0;
+      let failureCount = 0;
+      
+      for (const file of selectedFiles) {
+        try {
+          const formData = new FormData();
+          formData.append('title', file.name.replace(/\.[^/.]+$/, ""));
+          formData.append('file', file);
+          await api.createArticle(reviewId, formData);
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to upload ${file.name}:`, error);
+          failureCount++;
+        }
+      }
+      
+      // Refresh the review data to get updated article count
+      await refreshReviews();
+      
+      if (failureCount > 0) {
+        alert(`Uploaded ${successCount} article(s). Failed to upload ${failureCount} article(s).`);
+      }
+      handleSkip();
+    } catch (error) {
+      console.error("Failed to upload articles:", error);
+      alert("Failed to upload articles. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const refreshReviews = async () => {
+    try {
+      const reviewsData = await api.getReviews();
+      const reviewsArray = Array.isArray(reviewsData) ? reviewsData : (reviewsData?.data || []);
+      setReviews(reviewsArray);
+    } catch (error) {
+      console.error("Failed to refresh reviews:", error);
+    }
+  };
+
+  const inviteMembers = async (reviewId: number) => {
+    if (!inviteEmails.trim() || !inviteRole) {
+      handleSkip();
+      return;
+    }
+
+    setInviting(true);
+    try {
+      const emails = inviteEmails.split(',').map(e => e.trim()).filter(e => e);
+      let successCount = 0;
+      let failureCount = 0;
+      
+      for (const email of emails) {
+        try {
+          await api.addTeamMember(reviewId, {
+            email,
+            role: inviteRole.toLowerCase(),
+            message: inviteMsg || undefined,
+          });
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to invite ${email}:`, error);
+          failureCount++;
+        }
+      }
+      
+      if (successCount > 0) {
+        alert(`Invited ${successCount} member(s)${failureCount > 0 ? `. Failed to invite ${failureCount} member(s).` : '.'}`);
+      } else if (failureCount > 0) {
+        alert(`Failed to invite ${failureCount} member(s). Please check the email addresses.`);
+      }
+      handleSkip();
+    } catch (error) {
+      console.error("Failed to invite members:", error);
+      alert("Failed to invite members. Please try again.");
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const deleteReview = async (id: number) => {
+    try {
+      await api.deleteReview(id);
+      setReviews(prev => prev.filter(r => r.id !== id));
+    } catch (error) {
+      console.error("Failed to delete review:", error);
+      alert("Failed to delete review. Please try again.");
+    }
+  };
 
   const resetModal = () => {
-    setShowModal(false); setStep(1);
-    setForm({ title: "", type: "", domain: "", description: "", dateCreated: new Date().toISOString().split("T")[0], owner: user.name });
-    setSelectedFiles([]); setInviteEmails(""); setInviteRole(""); setInviteMsg("");
+    setShowModal(false);
+    setStep(1);
+    setForm({ title: "", type: "", domain: "", description: "" });
+    setSelectedFiles([]);
+    setInviteEmails("");
+    setInviteRole("");
+    setInviteMsg("");
+    setCurrentReviewId(null);
   };
 
-  const handleNext = () => {
-    if (step < 3) setStep((step + 1) as ModalStep);
-    else { createReview(form); resetModal(); }
+  const handleNext = async () => {
+    if (step === 1) {
+      if (!form.title || !form.type || !form.domain) {
+        alert("Please fill in all required fields");
+        return;
+      }
+      const newReview = await createReview(form);
+      if (newReview) {
+        setStep(2);
+      }
+    } else if (step === 2) {
+      if (currentReviewId) {
+        await uploadArticles(currentReviewId);
+        setStep(3);
+      }
+    } else if (step === 3) {
+      if (currentReviewId) {
+        await inviteMembers(currentReviewId);
+        resetModal();
+      }
+    }
   };
 
-  const handleSkip = () => { if (step < 3) setStep((step + 1) as ModalStep); else resetModal(); };
+  const handleSkip = () => {
+    if (step < 3) {
+      setStep((step + 1) as ModalStep);
+    } else {
+      resetModal();
+    }
+  };
 
-  const formatDate = (d: string) => new Date(d).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
+  const formatDate = (d: string) => {
+    try {
+      return new Date(d).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
+    } catch {
+      return "N/A";
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 dark:border-white mx-auto"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading reviews...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
+    <ProtectedRoute>
     <div className="flex h-screen bg-gray-50 dark:bg-black">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -102,9 +295,9 @@ export default function ReviewsPage() {
                           {review.title}
                         </Link>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{formatDate(review.dateCreated)}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{review.owner}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{review.articles}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{formatDate(review.created_at)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{review.user?.name || "N/A"}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{review.articles_count || 0}</td>
                       <td className="px-6 py-4 relative">
                         <button onClick={() => setOpenMenuId(openMenuId === review.id ? null : review.id)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors">
                           <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" /></svg>
@@ -233,19 +426,20 @@ export default function ReviewsPage() {
               {step === 1 ? (
                 <button onClick={resetModal} className="text-xs text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded">Cancel</button>
               ) : (
-                <button onClick={handleSkip} className="text-xs text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded">Skip</button>
+                <button onClick={handleSkip} disabled={uploading || inviting} className="text-xs text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded disabled:opacity-50">Skip</button>
               )}
               <button
                 onClick={handleNext}
-                disabled={step === 1 && (!form.title || !form.type || !form.domain)}
+                disabled={(step === 1 && (!form.title || !form.type || !form.domain)) || uploading || inviting}
                 className="bg-black dark:bg-white text-white dark:text-black text-xs px-4 py-1.5 rounded font-medium hover:bg-gray-800 dark:hover:bg-gray-200 disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
-                {step === 1 ? "Create New Review" : step === 2 ? "Select Files" : "Invite"}
+                {uploading || inviting ? "Processing..." : step === 1 ? "Create & Continue" : step === 2 ? "Upload & Continue" : "Send Invites"}
               </button>
             </div>
           </div>
         </div>
       )}
     </div>
+    </ProtectedRoute>
   );
 }

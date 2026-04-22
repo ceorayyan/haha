@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import api from "../../lib/api";
+import { useState } from "react";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -10,6 +12,22 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    if (confirm("Are you sure you want to logout?")) {
+      setLoggingOut(true);
+      try {
+        await api.logout();
+        router.push("/login");
+      } catch (error) {
+        console.error("Logout failed:", error);
+      } finally {
+        setLoggingOut(false);
+      }
+    }
+  };
 
   const menuItems = [
     {
@@ -103,7 +121,17 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           </nav>
 
           {/* Footer */}
-          <div className="p-3 border-t border-gray-200 dark:border-gray-800">
+          <div className="p-3 border-t border-gray-200 dark:border-gray-800 space-y-2">
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <span>{loggingOut ? "Logging out..." : "Logout"}</span>
+            </button>
             <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
               Rayyan v1.0.0
             </div>

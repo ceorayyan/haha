@@ -48,6 +48,9 @@ export interface Article {
   status: "included" | "excluded" | "undecided";
   screeningDecision: "include" | "exclude" | "maybe" | null;
   screeningNotes: string;
+  excludedBy?: string;
+  excludedAt?: string;
+  exclusionReasons?: string[];
 }
 
 export interface User {

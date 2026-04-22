@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
 import { useData } from "../context/DataContext";
+import api from "../../lib/api";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -11,6 +14,21 @@ interface HeaderProps {
 
 export default function Header({ onMenuClick, title = "Rayyan", showTitle = true }: HeaderProps) {
   const { user, blindMode, toggleBlindMode } = useData();
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const router = useRouter();
+
+  const currentUser = api.getStoredUser();
+  const userInitial = currentUser?.name?.charAt(0).toUpperCase() || "U";
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+      router.push("/login");
+    } catch (error) {
+      console.error("Logout failed:", error);
+      router.push("/login");
+    }
+  };
 
   return (
     <header className="bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 h-12 flex items-center px-4 gap-3 shrink-0">
@@ -78,9 +96,67 @@ export default function Header({ onMenuClick, title = "Rayyan", showTitle = true
       {/* Theme Toggle */}
       <ThemeToggle />
 
-      {/* User Avatar */}
-      <div className="w-8 h-8 rounded-full bg-black dark:bg-white flex items-center justify-center">
-        <span className="text-white dark:text-black text-sm font-medium">{user.avatar}</span>
+      {/* User Profile Dropdown */}
+      <div className="relative">
+        <button
+          onClick={() => setShowProfileMenu(!showProfileMenu)}
+          className="w-8 h-8 rounded-full bg-black dark:bg-white flex items-center justify-center hover:opacity-80 transition-opacity"
+          title={currentUser?.name || "User"}
+        >
+          <span className="text-white dark:text-black text-sm font-medium">{userInitial}</span>
+        </button>
+
+        {showProfileMenu && (
+          <>
+            <div
+              className="fixed inset-0 z-10"
+              onClick={() => setShowProfileMenu(false)}
+            />
+            <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-20">
+              {/* Profile Info */}
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {currentUser?.name || "User"}
+                </p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  {currentUser?.email || ""}
+                </p>
+              </div>
+
+              {/* Menu Items */}
+              <div className="py-1">
+                <button
+                  onClick={() => {
+                    setShowProfileMenu(false);
+                    // Profile page can be added later
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                >
+                  👤 Profile
+                </button>
+                <button
+                  onClick={() => {
+                    setShowProfileMenu(false);
+                    // Settings page can be added later
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                >
+                  ⚙️ Settings
+                </button>
+              </div>
+
+              {/* Logout */}
+              <div className="border-t border-gray-200 dark:border-gray-700 py-1">
+                <button
+                  onClick={handleLogout}
+                  className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                >
+                  🚪 Logout
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </header>
   );

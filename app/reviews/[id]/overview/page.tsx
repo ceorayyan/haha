@@ -243,8 +243,8 @@ export default function OverviewPage() {
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400">{screenedCount}</p>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Screened</p>
               </div>
-              <div className="text-center p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{totalCount - screenedCount}</p>
+              <div className="text-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalCount - screenedCount}</p>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Remaining</p>
               </div>
             </div>
@@ -254,7 +254,7 @@ export default function OverviewPage() {
             <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800">
               <a
                 href={`/reviews/${reviewId}/screening`}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 dark:bg-white text-white dark:text-black rounded-lg font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
