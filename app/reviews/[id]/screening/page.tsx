@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
-import { useData } from "../../../context/DataContext";
+import api from "@/lib/api";
 
 type SortOption = "newest" | "oldest" | "title-asc" | "title-desc" | "author-asc" | "author-desc";
 type FilterStatus = "all" | "undecided" | "included" | "excluded" | "maybe";
@@ -20,9 +20,35 @@ const exclusionReasonOptions = [
 export default function ScreeningPage() {
   const params = useParams();
   const reviewId = Number(params.id);
-  const { getArticlesByReviewId, updateArticle, user } = useData();
+  
+  const [allArticles, setAllArticles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalArticles, setTotalArticles] = useState(0);
+  const [user, setUser] = useState<any>(null);
 
-  const allArticles = getArticlesByReviewId(reviewId);
+  // Fetch articles on mount and when page changes
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const articlesData = await api.getArticles(reviewId, currentPage, 100);
+        const articlesArray = Array.isArray(articlesData) ? articlesData : articlesData.data || [];
+        setAllArticles(articlesArray);
+        setTotalArticles(articlesData?.total || articlesArray.length);
+
+        const userData = api.getStoredUser();
+        setUser(userData);
+      } catch (error) {
+        console.error("Failed to fetch articles:", error);
+        setAllArticles([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [reviewId, currentPage]);
 
   const [selectedId, setSelectedId] = useState<number | null>(
     allArticles.find((a) => a.status === "undecided")?.id ?? null
@@ -54,27 +80,38 @@ export default function ScreeningPage() {
   }), [allArticles]);
 
   const allKeywords = useMemo(() => {
+    if (!allArticles || allArticles.length === 0) return [];
     const map = new Map<string, number>();
-    allArticles.forEach((a) => a.keywords.forEach((k) => map.set(k, (map.get(k) || 0) + 1)));
+    allArticles.forEach((a) => {
+      if (a.keywords && Array.isArray(a.keywords)) {
+        a.keywords.forEach((k: string) => map.set(k, (map.get(k) || 0) + 1));
+      }
+    });
     return Array.from(map.entries()).map(([word, count]) => ({ word, count })).sort((a, b) => b.count - a.count);
   }, [allArticles]);
 
   const filteredArticles = useMemo(() => {
-    let list = allArticles;
+    let list = allArticles || [];
     if (filterStatus === "maybe") list = list.filter((a) => a.screeningDecision === "maybe");
     else if (filterStatus !== "all") list = list.filter((a) => a.status === filterStatus);
 
-    if (includeKw.length) list = list.filter((a) => includeKw.some((k) => a.keywords.includes(k) || a.title.toLowerCase().includes(k)));
-    if (excludeKw.length) list = list.filter((a) => !excludeKw.some((k) => a.keywords.includes(k) || a.title.toLowerCase().includes(k)));
+    if (includeKw.length) list = list.filter((a) => includeKw.some((k) => {
+      const keywords = a.keywords || [];
+      return keywords.includes(k) || (a.title && a.title.toLowerCase().includes(k));
+    }));
+    if (excludeKw.length) list = list.filter((a) => !excludeKw.some((k) => {
+      const keywords = a.keywords || [];
+      return keywords.includes(k) || (a.title && a.title.toLowerCase().includes(k));
+    }));
 
     return [...list].sort((a, b) => {
       switch (sortBy) {
-        case "newest": return b.year - a.year;
-        case "oldest": return a.year - b.year;
-        case "title-asc": return a.title.localeCompare(b.title);
-        case "title-desc": return b.title.localeCompare(a.title);
-        case "author-asc": return a.authors.localeCompare(b.authors);
-        case "author-desc": return b.authors.localeCompare(a.authors);
+        case "newest": return (b.year || 0) - (a.year || 0);
+        case "oldest": return (a.year || 0) - (b.year || 0);
+        case "title-asc": return (a.title || "").localeCompare(b.title || "");
+        case "title-desc": return (b.title || "").localeCompare(a.title || "");
+        case "author-asc": return (a.authors || "").localeCompare(b.authors || "");
+        case "author-desc": return (b.authors || "").localeCompare(a.authors || "");
         default: return 0;
       }
     });
@@ -97,33 +134,47 @@ export default function ScreeningPage() {
 
   const selected = allArticles.find((a) => a.id === selectedId);
 
-  const decide = (decision: "include" | "exclude" | "maybe") => {
+  const decide = async (decision: "include" | "exclude" | "maybe") => {
     if (!selectedId) return;
     if (decision === "exclude") { setShowExcludeModal(true); return; }
-    updateArticle(selectedId, {
-      screeningDecision: decision,
-      status: decision === "include" ? "included" : "undecided",
-      screeningNotes: note,
-    });
-    setNote("");
-    const next = filteredArticles.filter((a) => a.id !== selectedId)[0];
-    setSelectedId(next?.id ?? null);
+    
+    try {
+      await api.updateArticleScreening(selectedId, {
+        screening_decision: decision,
+        screening_notes: note,
+      });
+      setNote("");
+      const next = filteredArticles.filter((a) => a.id !== selectedId)[0];
+      setSelectedId(next?.id ?? null);
+      // Refresh articles
+      const articlesData = await api.getArticles(reviewId, currentPage, 100);
+      const articlesArray = Array.isArray(articlesData) ? articlesData : articlesData.data || [];
+      setAllArticles(articlesArray);
+    } catch (error) {
+      console.error("Failed to update article:", error);
+    }
   };
 
-  const handleExclude = () => {
+  const handleExclude = async () => {
     if (!selectedId) return;
     const reasons = [...selectedExclusionReasons, ...(customExclusionReason.trim() ? [customExclusionReason.trim()] : [])];
-    updateArticle(selectedId, {
-      screeningDecision: "exclude",
-      status: "excluded",
-      screeningNotes: note,
-      excludedBy: user.name,
-      excludedAt: new Date().toISOString(),
-      exclusionReasons: reasons,
-    });
-    setNote(""); setSelectedExclusionReasons([]); setCustomExclusionReason(""); setShowExcludeModal(false);
-    const next = filteredArticles.filter((a) => a.id !== selectedId)[0];
-    setSelectedId(next?.id ?? null);
+    
+    try {
+      await api.updateArticleScreening(selectedId, {
+        screening_decision: "exclude",
+        screening_notes: note,
+        exclusion_reasons: reasons,
+      });
+      setNote(""); setSelectedExclusionReasons([]); setCustomExclusionReason(""); setShowExcludeModal(false);
+      const next = filteredArticles.filter((a) => a.id !== selectedId)[0];
+      setSelectedId(next?.id ?? null);
+      // Refresh articles
+      const articlesData = await api.getArticles(reviewId, currentPage, 100);
+      const articlesArray = Array.isArray(articlesData) ? articlesData : articlesData.data || [];
+      setAllArticles(articlesArray);
+    } catch (error) {
+      console.error("Failed to exclude article:", error);
+    }
   };
 
   const statusLabel: Record<FilterStatus, string> = { all: "All", undecided: "Undecided", included: "Included", excluded: "Excluded", maybe: "Maybe" };
@@ -233,7 +284,7 @@ export default function ScreeningPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 mb-6">
-                  {selected.keywords.map((k) => (
+                  {selected.keywords.map((k: string) => (
                     <span key={k} className={`text-xs px-2 py-0.5 rounded border
                       ${includeKw.includes(k) ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400"
                         : excludeKw.includes(k) ? "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400"
@@ -253,7 +304,7 @@ export default function ScreeningPage() {
                     <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-2">Excluded by {selected.excludedBy}</p>
                     {selected.exclusionReasons?.length ? (
                       <div className="flex flex-wrap gap-1.5 mt-2">
-                        {selected.exclusionReasons.map((r, i) => (
+                        {selected.exclusionReasons.map((r: string, i: number) => (
                           <span key={i} className="text-xs px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800">{r}</span>
                         ))}
                       </div>

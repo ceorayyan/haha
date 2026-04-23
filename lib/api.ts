@@ -178,8 +178,8 @@ class ApiClient {
   }
 
   // Article Methods
-  async getArticles(reviewId: number) {
-    return this.request<any[]>(`/reviews/${reviewId}/articles`);
+  async getArticles(reviewId: number, page: number = 1, perPage: number = 100) {
+    return this.request<any>(`/reviews/${reviewId}/articles?page=${page}&per_page=${perPage}`);
   }
 
   async getArticle(id: number) {
@@ -242,6 +242,26 @@ class ApiClient {
     });
   }
 
+  async detectDuplicates(reviewId: number) {
+    return this.request<any>(`/reviews/${reviewId}/articles/detect-duplicates`, {
+      method: 'POST',
+    });
+  }
+
+  async bulkUpdateArticles(
+    reviewId: number,
+    data: {
+      article_ids: number[];
+      screening_decision?: 'include' | 'exclude' | 'maybe';
+      screening_notes?: string;
+    }
+  ) {
+    return this.request<any>(`/reviews/${reviewId}/articles/bulk-update`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
   async deleteArticle(id: number) {
     return this.request<{ message: string }>(`/articles/${id}`, {
       method: 'DELETE',
@@ -282,7 +302,9 @@ class ApiClient {
 
   // Team Member Methods
   async getTeamMembers(reviewId: number) {
-    return this.request<any[]>(`/reviews/${reviewId}/members`);
+    const response = await this.request<any>(`/reviews/${reviewId}/members`);
+    // Handle both paginated and non-paginated responses
+    return Array.isArray(response) ? response : response.data || [];
   }
 
   async addTeamMember(

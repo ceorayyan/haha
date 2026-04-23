@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
 import { useData } from "../context/DataContext";
 import api from "../../lib/api";
+import { getBrandingConfig, getLogoInitial, BrandingConfig } from "../../lib/branding";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -12,13 +13,31 @@ interface HeaderProps {
   showTitle?: boolean;
 }
 
-export default function Header({ onMenuClick, title = "Rayyan", showTitle = true }: HeaderProps) {
+export default function Header({ onMenuClick, title, showTitle = true }: HeaderProps) {
   const { user, blindMode, toggleBlindMode } = useData();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [branding, setBranding] = useState<BrandingConfig | null>(null);
   const router = useRouter();
 
   const currentUser = api.getStoredUser();
   const userInitial = currentUser?.name?.charAt(0).toUpperCase() || "U";
+
+  // Load branding config on mount and listen for changes
+  useEffect(() => {
+    const loadBranding = async () => {
+      const config = await getBrandingConfig();
+      setBranding(config);
+    };
+
+    loadBranding();
+
+    // Listen for branding config changes
+    window.addEventListener("brandingConfigChanged", loadBranding);
+    return () => window.removeEventListener("brandingConfigChanged", loadBranding);
+  }, []);
+
+  const displayTitle = title || branding?.websiteName || "StataNexus.Ai";
+  const logoInitial = branding ? getLogoInitial(branding.websiteName) : "S";
 
   const handleLogout = async () => {
     try {
@@ -45,11 +64,19 @@ export default function Header({ onMenuClick, title = "Rayyan", showTitle = true
 
       {/* Logo */}
       <div className="flex items-center gap-2">
-        <div className="w-7 h-7 bg-black dark:bg-white rounded flex items-center justify-center shrink-0">
-          <span className="text-white dark:text-black font-bold text-sm">R</span>
-        </div>
+        {branding?.logoUrl ? (
+          <img
+            src={branding.logoUrl}
+            alt="Logo"
+            className="w-7 h-7 object-contain rounded"
+          />
+        ) : (
+          <div className="w-7 h-7 bg-black dark:bg-white rounded flex items-center justify-center shrink-0">
+            <span className="text-white dark:text-black font-bold text-sm">{logoInitial}</span>
+          </div>
+        )}
         {showTitle && (
-          <span className="font-semibold text-base text-gray-900 dark:text-white">{title}</span>
+          <span className="font-semibold text-base text-gray-900 dark:text-white">{displayTitle}</span>
         )}
       </div>
 

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import api from "../../lib/api";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getBrandingConfig, getLogoInitial, BrandingConfig } from "../../lib/branding";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -14,6 +15,21 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [branding, setBranding] = useState<BrandingConfig | null>(null);
+  const currentUser = api.getStoredUser();
+
+  useEffect(() => {
+    const loadBranding = async () => {
+      const config = await getBrandingConfig();
+      setBranding(config);
+    };
+
+    loadBranding();
+
+    // Listen for branding config changes
+    window.addEventListener("brandingConfigChanged", loadBranding);
+    return () => window.removeEventListener("brandingConfigChanged", loadBranding);
+  }, []);
 
   const handleLogout = async () => {
     if (confirm("Are you sure you want to logout?")) {
@@ -83,10 +99,22 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           {/* Logo */}
           <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-200 dark:border-gray-800">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-black dark:bg-white rounded-lg flex items-center justify-center">
-                <span className="text-white dark:text-black font-bold text-xs">R</span>
-              </div>
-              <span className="font-semibold text-sm text-gray-900 dark:text-white">Rayyan</span>
+              {branding?.logoUrl ? (
+                <img
+                  src={branding.logoUrl}
+                  alt="Logo"
+                  className="w-7 h-7 object-contain rounded-lg"
+                />
+              ) : (
+                <div className="w-7 h-7 bg-black dark:bg-white rounded-lg flex items-center justify-center">
+                  <span className="text-white dark:text-black font-bold text-xs">
+                    {branding ? getLogoInitial(branding.websiteName) : "S"}
+                  </span>
+                </div>
+              )}
+              <span className="font-semibold text-sm text-gray-900 dark:text-white">
+                {branding?.websiteName || "StataNexus.Ai"}
+              </span>
             </div>
             <button
               onClick={onClose}
@@ -133,7 +161,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               <span>{loggingOut ? "Logging out..." : "Logout"}</span>
             </button>
             <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
-              Rayyan v1.0.0
+              {branding?.websiteName || "StataNexus.Ai"} v1.0.0
             </div>
           </div>
         </div>

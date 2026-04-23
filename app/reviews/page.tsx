@@ -243,16 +243,29 @@ export default function ReviewsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-black flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 dark:border-white mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading reviews...</p>
+  // Skeleton loader component
+  const SkeletonRow = () => (
+    <tr className="animate-pulse">
+      <td className="px-6 py-4">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-48"></div>
         </div>
-      </div>
-    );
-  }
+      </td>
+      <td className="px-6 py-4">
+        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+      </td>
+      <td className="px-6 py-4">
+        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
+      </td>
+      <td className="px-6 py-4">
+        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-12"></div>
+      </td>
+      <td className="px-6 py-4">
+        <div className="w-4 h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
+      </td>
+    </tr>
+  );
 
   return (
     <ProtectedRoute>
@@ -287,7 +300,15 @@ export default function ReviewsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                  {reviews.map((review) => (
+                  {loading ? (
+                    <>
+                      <SkeletonRow />
+                      <SkeletonRow />
+                      <SkeletonRow />
+                      <SkeletonRow />
+                      <SkeletonRow />
+                    </>
+                  ) : reviews.map((review) => (
                     <tr key={review.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                       <td className="px-6 py-4">
                         <Link href={`/reviews/${review.id}/overview`} className="flex items-center gap-2 text-gray-900 dark:text-gray-100 hover:text-black dark:hover:text-white text-sm font-medium transition-colors">

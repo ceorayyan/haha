@@ -1,22 +1,53 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { useData } from "../../../context/DataContext";
-import type { Article } from "../../../context/DataContext";
+import api from "@/lib/api";
 
-function extractKeywords(articles: Article[]) {
+function extractKeywords(articles: any[]) {
+  if (!articles || articles.length === 0) return [];
   const freq: Record<string, number> = {};
-  articles.forEach((a) => a.keywords.forEach((k) => { const w = k.toLowerCase().trim(); freq[w] = (freq[w] || 0) + 1; }));
+  articles.forEach((a) => {
+    const keywords = a.keywords || [];
+    if (Array.isArray(keywords)) {
+      keywords.forEach((k: string) => { 
+        const w = k.toLowerCase().trim(); 
+        freq[w] = (freq[w] || 0) + 1; 
+      });
+    }
+  });
   return Object.entries(freq).map(([word, count]) => ({ word, count })).sort((a, b) => b.count - a.count);
 }
 
 export default function FullTextPage() {
   const params = useParams();
   const reviewId = Number(params.id);
-  const { getArticlesByReviewId, updateArticle } = useData();
+  
+  const [allArticles, setAllArticles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalArticles, setTotalArticles] = useState(0);
 
-  const allArticles = getArticlesByReviewId(reviewId);
+  // Fetch articles on mount and when page changes
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const articlesData = await api.getArticles(reviewId, currentPage, 100);
+        const articlesArray = Array.isArray(articlesData) ? articlesData : articlesData.data || [];
+        setAllArticles(articlesArray);
+        setTotalArticles(articlesData?.total || articlesArray.length);
+      } catch (error) {
+        console.error("Failed to fetch articles:", error);
+        setAllArticles([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [reviewId, currentPage]);
+
   const pending = allArticles.filter((a) => a.status !== "included" && a.status !== "excluded");
 
   const [selectedId, setSelectedId] = useState<number | null>(pending[0]?.id ?? null);
@@ -28,16 +59,23 @@ export default function FullTextPage() {
   const allKeywords = useMemo(() => extractKeywords(allArticles), [allArticles]);
   const selected = allArticles.find((a) => a.id === selectedId);
 
-  const decide = (decision: "include" | "exclude") => {
+  const decide = async (decision: "include" | "exclude") => {
     if (!selectedId) return;
-    updateArticle(selectedId, {
-      screeningDecision: decision,
-      status: decision === "include" ? "included" : "excluded",
-      screeningNotes: note,
-    });
-    setNote("");
-    const remaining = pending.filter((a) => a.id !== selectedId);
-    setSelectedId(remaining[0]?.id ?? null);
+    try {
+      await api.updateArticleScreening(selectedId, {
+        screening_decision: decision,
+        screening_notes: note,
+      });
+      setNote("");
+      const remaining = pending.filter((a) => a.id !== selectedId);
+      setSelectedId(remaining[0]?.id ?? null);
+      // Refresh articles
+      const articlesData = await api.getArticles(reviewId, currentPage, 100);
+      const articlesArray = Array.isArray(articlesData) ? articlesData : articlesData.data || [];
+      setAllArticles(articlesArray);
+    } catch (error) {
+      console.error("Failed to update article:", error);
+    }
   };
 
   const toggleInclude = (word: string) => {
@@ -102,7 +140,7 @@ export default function FullTextPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 mb-6">
-                  {selected.keywords.map((k) => (
+                  {selected.keywords.map((k: string) => (
                     <span key={k} className={`text-xs px-2 py-0.5 rounded border
                       ${includeKw.includes(k) ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400"
                         : excludeKw.includes(k) ? "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400"
