@@ -4,7 +4,8 @@
    WITH LIGHT & DARK THEME SUPPORT
 ============================================ */
 
-* {
+/* Scoped reset - only affects landing page */
+.landing-page * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;

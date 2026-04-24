@@ -26,33 +26,7 @@ export default function ScreeningPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalArticles, setTotalArticles] = useState(0);
   const [user, setUser] = useState<any>(null);
-
-  // Fetch articles on mount and when page changes
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const articlesData = await api.getArticles(reviewId, currentPage, 100);
-        const articlesArray = Array.isArray(articlesData) ? articlesData : articlesData.data || [];
-        setAllArticles(articlesArray);
-        setTotalArticles(articlesData?.total || articlesArray.length);
-
-        const userData = api.getStoredUser();
-        setUser(userData);
-      } catch (error) {
-        console.error("Failed to fetch articles:", error);
-        setAllArticles([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [reviewId, currentPage]);
-
-  const [selectedId, setSelectedId] = useState<number | null>(
-    allArticles.find((a) => a.status === "undecided")?.id ?? null
-  );
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [note, setNote] = useState("");
   const [includeKw, setIncludeKw] = useState<string[]>([]);
   const [excludeKw, setExcludeKw] = useState<string[]>([]);
@@ -70,6 +44,35 @@ export default function ScreeningPage() {
   const [newExcludeKeyword, setNewExcludeKeyword] = useState("");
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fetch articles on mount and when page changes
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const articlesData = await api.getArticles(reviewId, currentPage, 100);
+        const articlesArray = Array.isArray(articlesData) ? articlesData : articlesData.data || [];
+        setAllArticles(articlesArray);
+        setTotalArticles(articlesData?.total || articlesArray.length);
+
+        // Set initial selected article if not already set
+        if (!selectedId && articlesArray.length > 0) {
+          const firstUndecided = articlesArray.find((a: any) => a.status === "undecided");
+          setSelectedId(firstUndecided?.id ?? articlesArray[0].id);
+        }
+
+        const userData = api.getStoredUser();
+        setUser(userData);
+      } catch (error) {
+        console.error("Failed to fetch articles:", error);
+        setAllArticles([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [reviewId, currentPage]);
 
   const statusCounts = useMemo(() => ({
     all: allArticles.length,
@@ -240,7 +243,23 @@ export default function ScreeningPage() {
 
         {/* Article list */}
         <div className="flex-1 overflow-y-auto">
-          {filteredArticles.length === 0 ? (
+          {loading ? (
+            // Skeleton loading
+            <>
+              {[...Array(8)].map((_, idx) => (
+                <div key={idx} className="w-full px-4 py-3.5 border-b border-gray-100 dark:border-gray-900 animate-pulse">
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-gray-300 dark:bg-gray-700" />
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-full"></div>
+                      <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-3/4"></div>
+                      <div className="h-2 bg-gray-200 dark:bg-gray-800 rounded w-1/2 mt-2"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : filteredArticles.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-2 px-6 text-center">
               <svg className="w-8 h-8 text-gray-300 dark:text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               <p className="text-xs text-gray-400 dark:text-gray-500">No articles</p>
@@ -262,7 +281,46 @@ export default function ScreeningPage() {
 
       {/* ── Center: article detail */}
       <div className="flex-1 flex flex-col overflow-hidden border-r border-gray-200 dark:border-gray-800">
-        {selected ? (
+        {loading ? (
+          // Skeleton loading for article detail
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-2xl mx-auto px-8 py-8 animate-pulse">
+              <div className="h-6 bg-gray-200 dark:bg-gray-800 rounded w-3/4 mb-5"></div>
+
+              <div className="space-y-3 mb-6">
+                <div className="flex gap-3">
+                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-28"></div>
+                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded flex-1"></div>
+                </div>
+                <div className="flex gap-3">
+                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-28"></div>
+                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-48"></div>
+                </div>
+                <div className="flex gap-3">
+                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-28"></div>
+                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-32"></div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 mb-6">
+                {[...Array(5)].map((_, idx) => (
+                  <div key={idx} className="h-6 bg-gray-200 dark:bg-gray-800 rounded w-20"></div>
+                ))}
+              </div>
+
+              <div className="border-t border-gray-100 dark:border-gray-900 pt-6">
+                <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-20 mb-3"></div>
+                <div className="space-y-2">
+                  <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-full"></div>
+                  <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-full"></div>
+                  <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-5/6"></div>
+                  <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-full"></div>
+                  <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-4/5"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : selected ? (
           <>
             <div className="flex-1 overflow-y-auto">
               <div className="max-w-2xl mx-auto px-8 py-8">
@@ -284,7 +342,7 @@ export default function ScreeningPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 mb-6">
-                  {selected.keywords.map((k: string) => (
+                  {(selected.keywords || []).map((k: string) => (
                     <span key={k} className={`text-xs px-2 py-0.5 rounded border
                       ${includeKw.includes(k) ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400"
                         : excludeKw.includes(k) ? "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400"
@@ -375,8 +433,46 @@ export default function ScreeningPage() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-4 space-y-6">
+          {loading ? (
+            // Skeleton loading for filters
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-4 space-y-6 animate-pulse">
+                {/* Include keywords skeleton */}
+                <div>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-20"></div>
+                    <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-8"></div>
+                  </div>
+                  <div className="space-y-2">
+                    {[...Array(6)].map((_, idx) => (
+                      <div key={idx} className="flex items-center justify-between px-2 py-1.5">
+                        <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-24"></div>
+                        <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-6"></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Exclude keywords skeleton */}
+                <div>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-20"></div>
+                    <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-8"></div>
+                  </div>
+                  <div className="space-y-2">
+                    {[...Array(6)].map((_, idx) => (
+                      <div key={idx} className="flex items-center justify-between px-2 py-1.5">
+                        <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-24"></div>
+                        <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-6"></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-4 space-y-6">
 
               {/* Include keywords */}
               <div>
@@ -454,6 +550,7 @@ export default function ScreeningPage() {
 
             </div>
           </div>
+          )}
         </div>
       )}
 

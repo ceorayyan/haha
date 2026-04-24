@@ -12,8 +12,8 @@ export default function SignupPage() {
     router.push("/login");
   }, [router]);
 
-  // Show loading state while fetching branding
-  if (brandingLoading || !branding) {
+  // Only show loading if branding is not cached yet
+  if (brandingLoading && !branding) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center px-4">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>

@@ -19,26 +19,24 @@ export default function ReviewDetailLayout({ children }: { children: React.React
   useEffect(() => {
     const autoAcceptInvitation = async () => {
       try {
-        // Fetch review to check if user has access
-        const reviewData = await api.getReview(reviewId);
-        setReview(reviewData);
-        
-        // Try to accept invitation (will only work if user has a pending invitation)
+        // Try to accept invitation first (will only work if user has a pending invitation)
         try {
           await api.request(`/reviews/${reviewId}/accept`, { method: 'POST' });
           setInvitationAccepted(true);
           console.log("Invitation auto-accepted");
         } catch (error: any) {
           // Silently fail - user might not have a pending invitation or already accepted
-          // Only log if it's not a 403/404 error (which is expected)
-          if (!error.message?.includes('permission') && !error.message?.includes('not found')) {
-            console.log("No pending invitation to accept or already accepted");
-          }
+          // This is expected for users who are already members or not invited
+          console.log("No pending invitation to accept or already accepted");
         }
+        
+        // Fetch review data after attempting to accept invitation
+        const reviewData = await api.getReview(reviewId);
+        setReview(reviewData);
       } catch (error: any) {
         console.error("Failed to load review:", error);
         // Don't show error for permission issues - user might not have access yet
-        if (error.message?.includes('permission')) {
+        if (error.message?.includes('permission') || error.message?.includes('Unauthorized')) {
           console.log("Waiting for review access...");
         }
       }

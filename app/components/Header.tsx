@@ -17,10 +17,15 @@ export default function Header({ onMenuClick, title, showTitle = true }: HeaderP
   const { user, blindMode, toggleBlindMode } = useData();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [branding, setBranding] = useState<BrandingConfig | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const router = useRouter();
 
-  const currentUser = api.getStoredUser();
   const userInitial = currentUser?.name?.charAt(0).toUpperCase() || "U";
+
+  // Load user data on client side only to avoid hydration mismatch
+  useEffect(() => {
+    setCurrentUser(api.getStoredUser());
+  }, []);
 
   // Load branding config on mount and listen for changes
   useEffect(() => {
