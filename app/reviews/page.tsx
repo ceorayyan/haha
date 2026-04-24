@@ -409,7 +409,7 @@ export default function ReviewsPage() {
                   <p className="text-xs text-gray-400 mb-3">Select up to 10 files...</p>
                   <svg className="w-10 h-10 text-gray-500 dark:text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
                   <p className="text-xs text-gray-600 mb-1">Select files to import</p>
-                  <p className="text-xs text-gray-400 mb-3">import and manage your data set with Rayyan!</p>
+                  <p className="text-xs text-gray-400 mb-3">Import and manage your data set with {branding?.websiteName || "Research Nexus"}!</p>
                   <button onClick={() => fileInputRef.current?.click()} className="bg-black dark:bg-white text-white dark:text-black text-xs px-4 py-1.5 rounded font-medium hover:bg-gray-800 dark:hover:bg-gray-200">Select Files</button>
                   <input ref={fileInputRef} type="file" multiple accept=".csv,.ris,.bib,.xml,.nbib" onChange={e => { if (e.target.files) setSelectedFiles(Array.from(e.target.files).slice(0, 10)); }} className="hidden" />
                   {selectedFiles.length > 0 && <p className="text-xs text-gray-500 mt-2">{selectedFiles.length} file(s) selected</p>}

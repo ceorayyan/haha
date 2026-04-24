@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
+import { useBranding } from "@/hooks/useBranding";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { branding, loading: brandingLoading } = useBranding();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,13 +40,31 @@ export default function LoginPage() {
     }
   };
 
+  // Show loading state while fetching branding
+  if (brandingLoading || !branding) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center px-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-black flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         {/* Logo / Brand */}
         <div className="text-center mb-10">
+          {branding.logo_url && (
+            <div className="flex justify-center mb-4">
+              <img 
+                src={branding.logo_url} 
+                alt={branding.website_name} 
+                className="h-16 w-auto object-contain"
+              />
+            </div>
+          )}
           <h1 className="text-3xl font-bold text-white tracking-tight">
-            Rayyan
+            {branding.website_name}
           </h1>
           <p className="text-zinc-500 mt-2 text-sm">
             Systematic Review Platform

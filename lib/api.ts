@@ -68,17 +68,31 @@ class ApiClient {
           if (typeof window !== 'undefined') {
             window.location.href = '/login';
           }
+          throw new Error('Authentication required. Please log in again.');
+        }
+
+        if (response.status === 403) {
+          throw new Error('You do not have permission to access this resource.');
         }
 
         const error = await response.json().catch(() => ({
           message: 'An error occurred',
         }));
-        throw new Error(error.message || error.errors?.[Object.keys(error.errors)[0]]?.[0] || `HTTP ${response.status}`);
+        
+        const errorMessage = error.message || 
+                           error.errors?.[Object.keys(error.errors)[0]]?.[0] || 
+                           `Request failed with status ${response.status}`;
+        
+        throw new Error(errorMessage);
       }
 
       return await response.json();
-    } catch (error) {
+    } catch (error: any) {
       console.error('API Request Error:', error);
+      // Re-throw with a more user-friendly message if it's a network error
+      if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+        throw new Error('Unable to connect to the server. Please check your internet connection.');
+      }
       throw error;
     }
   }
@@ -322,6 +336,14 @@ class ApiClient {
       `/reviews/${reviewId}/members/${memberId}`,
       { method: 'DELETE' }
     );
+  }
+
+  // Settings Methods
+  async getSettings() {
+    return this.request<{
+      website_name: string;
+      logo_url: string | null;
+    }>('/settings', {}, false);
   }
 
   // Helper Methods

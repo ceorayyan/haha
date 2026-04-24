@@ -47,6 +47,10 @@ export default function ReviewDataPage() {
   const [selectedArticleModal, setSelectedArticleModal] = useState<Article | null>(null);
   const [bulkLabel, setBulkLabel] = useState<string>("");
   const [bulkNotes, setBulkNotes] = useState<string>("");
+  const [customIncludeKeyword, setCustomIncludeKeyword] = useState<string>("");
+  const [customExcludeKeyword, setCustomExcludeKeyword] = useState<string>("");
+  const [editingArticleId, setEditingArticleId] = useState<number | null>(null);
+  const [customLabel, setCustomLabel] = useState<string>("");
 
   // Fetch data
   useEffect(() => {
@@ -148,6 +152,39 @@ export default function ReviewDataPage() {
     );
   };
 
+  const addCustomIncludeKeyword = () => {
+    if (customIncludeKeyword.trim() && !includeKeywords.includes(customIncludeKeyword.trim())) {
+      setIncludeKeywords(prev => [...prev, customIncludeKeyword.trim()]);
+      setCustomIncludeKeyword("");
+    }
+  };
+
+  const addCustomExcludeKeyword = () => {
+    if (customExcludeKeyword.trim() && !excludeKeywords.includes(customExcludeKeyword.trim())) {
+      setExcludeKeywords(prev => [...prev, customExcludeKeyword.trim()]);
+      setCustomExcludeKeyword("");
+    }
+  };
+
+  const removeIncludeKeyword = (keyword: string) => {
+    setIncludeKeywords(prev => prev.filter(k => k !== keyword));
+  };
+
+  const removeExcludeKeyword = (keyword: string) => {
+    setExcludeKeywords(prev => prev.filter(k => k !== keyword));
+  };
+
+  const handleUpdateCustomLabel = async (articleId: number, label: string) => {
+    try {
+      await api.updateArticle(articleId, { screening_notes: label });
+      setArticles(articles.map(a => a.id === articleId ? { ...a, screening_notes: label } : a));
+      setEditingArticleId(null);
+      setCustomLabel("");
+    } catch (error) {
+      console.error("Failed to update label:", error);
+    }
+  };
+
   const handleDetectDuplicates = async () => {
     setDetectingDuplicates(true);
     try {
@@ -237,9 +274,6 @@ export default function ReviewDataPage() {
       <td className="px-5 py-4">
         <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
       </td>
-      <td className="px-5 py-4 text-center">
-        <div className="w-2.5 h-2.5 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto"></div>
-      </td>
     </tr>
   );
 
@@ -302,7 +336,7 @@ export default function ReviewDataPage() {
         </div>
 
         {/* Decision summary */}
-        <div className="px-5 py-5 mt-auto">
+        <div className="px-5 py-5 mt-auto hidden">
           <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Decisions</p>
           <div className="space-y-2.5">
             {[
@@ -376,7 +410,6 @@ export default function ReviewDataPage() {
                   Title
                 </th>
                 <th className="px-5 py-3.5 text-left font-bold text-gray-700 dark:text-gray-300">Author</th>
-                <th className="px-5 py-3.5 text-center font-bold text-gray-700 dark:text-gray-300 w-24">Decision</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-900">
@@ -399,9 +432,14 @@ export default function ReviewDataPage() {
                   <td className="px-4 py-4 text-gray-500 dark:text-gray-400 font-medium">{(currentPage - 1) * 100 + idx + 1}</td>
                   <td className="px-5 py-4">
                     <p 
-                      className="text-gray-900 dark:text-gray-100 font-semibold leading-relaxed mb-2"
+                      className="text-gray-900 dark:text-gray-100 font-semibold leading-relaxed mb-1"
                       dangerouslySetInnerHTML={{ __html: highlightText(article.title) }}
                     />
+                    {article.screening_notes && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">
+                        {article.screening_notes}
+                      </p>
+                    )}
                   </td>
                   <td className="px-5 py-4">
                     <p 
@@ -409,7 +447,6 @@ export default function ReviewDataPage() {
                       dangerouslySetInnerHTML={{ __html: highlightText(article.authors || "N/A") }}
                     />
                   </td>
-                  <td className="px-5 py-4 text-center">{decisionDot(article.screening_decision || null)}</td>
                 </tr>
               ))}
             </tbody>
@@ -424,7 +461,7 @@ export default function ReviewDataPage() {
                 <select 
                   value={bulkLabel}
                   onChange={(e) => setBulkLabel(e.target.value)}
-                  className="text-sm bg-white dark:bg-black border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg px-3 py-2 focus:outline-none transition-colors">
+                  className="text-sm bg-white dark:bg-black border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors">
                   <option value="">Select Label</option>
                   <option value="include">Include</option>
                   <option value="exclude">Exclude</option>
@@ -435,11 +472,11 @@ export default function ReviewDataPage() {
                   placeholder="Add notes..."
                   value={bulkNotes}
                   onChange={(e) => setBulkNotes(e.target.value)}
-                  className="text-sm bg-white dark:bg-black border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg px-3 py-2 focus:outline-none transition-colors"
+                  className="text-sm bg-white dark:bg-black border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors"
                 />
                 <button 
                   onClick={handleBulkUpdate}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                  className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium shadow-sm">
                   Update {selectedArticles.length}
                 </button>
                 <button 
@@ -448,16 +485,7 @@ export default function ReviewDataPage() {
                   Cancel
                 </button>
               </>
-            ) : (
-              <>
-                <button className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors font-medium">Attach PDF</button>
-                <button className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors flex items-center gap-2 font-medium">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
-                  Label
-                </button>
-                <button className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors font-medium">Export</button>
-              </>
-            )}
+            ) : null}
           </div>
           <div className="flex items-center gap-3">
             <button 
@@ -503,6 +531,38 @@ export default function ReviewDataPage() {
                   </div>
                   <span className="text-xs bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400 px-2 py-1 rounded-lg font-bold">{includeKeywords.length}</span>
                 </div>
+                
+                {/* Custom keyword input */}
+                <div className="mb-3 flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Add custom keyword..."
+                    value={customIncludeKeyword}
+                    onChange={(e) => setCustomIncludeKeyword(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && addCustomIncludeKeyword()}
+                    className="flex-1 text-sm bg-white dark:bg-black border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                  <button
+                    onClick={addCustomIncludeKeyword}
+                    className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium">
+                    +
+                  </button>
+                </div>
+
+                {/* Selected custom keywords */}
+                {includeKeywords.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {includeKeywords.map(keyword => (
+                      <span key={keyword} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400 rounded-lg text-xs font-medium">
+                        {keyword}
+                        <button onClick={() => removeIncludeKeyword(keyword)} className="hover:text-green-900 dark:hover:text-green-200">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 <div className="space-y-1">
                   {keywords.slice(0, 10).map(({ word, count }) => (
                     <label key={word} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-950 cursor-pointer transition-colors">
@@ -532,6 +592,38 @@ export default function ReviewDataPage() {
                   </div>
                   <span className="text-xs bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-400 px-2 py-1 rounded-lg font-bold">{excludeKeywords.length}</span>
                 </div>
+
+                {/* Custom keyword input */}
+                <div className="mb-3 flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Add custom keyword..."
+                    value={customExcludeKeyword}
+                    onChange={(e) => setCustomExcludeKeyword(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && addCustomExcludeKeyword()}
+                    className="flex-1 text-sm bg-white dark:bg-black border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                  <button
+                    onClick={addCustomExcludeKeyword}
+                    className="px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium">
+                    +
+                  </button>
+                </div>
+
+                {/* Selected custom keywords */}
+                {excludeKeywords.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {excludeKeywords.map(keyword => (
+                      <span key={keyword} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-400 rounded-lg text-xs font-medium">
+                        {keyword}
+                        <button onClick={() => removeExcludeKeyword(keyword)} className="hover:text-red-900 dark:hover:text-red-200">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 <div className="space-y-1">
                   {keywords.slice(0, 10).map(({ word, count }) => (
                     <label key={word} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-950 cursor-pointer transition-colors">
@@ -560,7 +652,7 @@ export default function ReviewDataPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-900 rounded-lg shadow-lg p-8 max-w-md w-full mx-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Detect Duplicates</h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">By start detecting duplicates, Rayyan will find all duplicated articles and organize it to help you resolve them!</p>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">By start detecting duplicates, {branding?.websiteName || "Research Nexus"} will find all duplicated articles and organize it to help you resolve them!</p>
             <div className="flex gap-3 justify-end">
               <button 
                 onClick={() => setShowDuplicateModal(false)}
@@ -570,7 +662,7 @@ export default function ReviewDataPage() {
               <button 
                 onClick={handleDetectDuplicates}
                 disabled={detectingDuplicates}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">
                 {detectingDuplicates ? "Detecting..." : "Proceed"}
               </button>
             </div>
@@ -582,7 +674,7 @@ export default function ReviewDataPage() {
       {detectingDuplicates && (
         <div className="fixed bottom-6 right-6 bg-white dark:bg-gray-900 rounded-lg shadow-lg p-4 flex items-center gap-3 z-50">
           <div className="animate-spin">
-            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" strokeWidth={2} opacity="0.25" /><path strokeLinecap="round" strokeWidth={2} d="M4 12a8 8 0 018-8" /></svg>
+            <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" strokeWidth={2} opacity="0.25" /><path strokeLinecap="round" strokeWidth={2} d="M4 12a8 8 0 018-8" /></svg>
           </div>
           <div>
             <p className="text-sm font-semibold text-gray-900 dark:text-white">Detect Duplicates</p>

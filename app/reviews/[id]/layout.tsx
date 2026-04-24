@@ -28,12 +28,19 @@ export default function ReviewDetailLayout({ children }: { children: React.React
           await api.request(`/reviews/${reviewId}/accept`, { method: 'POST' });
           setInvitationAccepted(true);
           console.log("Invitation auto-accepted");
-        } catch (error) {
-          // Silently fail - user might not have a pending invitation
-          console.log("No pending invitation to accept");
+        } catch (error: any) {
+          // Silently fail - user might not have a pending invitation or already accepted
+          // Only log if it's not a 403/404 error (which is expected)
+          if (!error.message?.includes('permission') && !error.message?.includes('not found')) {
+            console.log("No pending invitation to accept or already accepted");
+          }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to load review:", error);
+        // Don't show error for permission issues - user might not have access yet
+        if (error.message?.includes('permission')) {
+          console.log("Waiting for review access...");
+        }
       }
     };
 
