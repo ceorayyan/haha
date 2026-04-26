@@ -35,7 +35,8 @@ export async function getBrandingConfig(): Promise<BrandingConfig> {
 
   // Fetch from backend API
   try {
-    const response = await fetch('/api/settings');
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+    const response = await fetch(`${API_BASE_URL}/settings`);
     if (response.ok) {
       const data = await response.json();
       const config: BrandingConfig = {
@@ -51,7 +52,8 @@ export async function getBrandingConfig(): Promise<BrandingConfig> {
       return config;
     }
   } catch (error) {
-    console.error('Failed to fetch branding config from API:', error);
+    // Silently handle - settings endpoint might not exist yet
+    // This is expected during development
   }
 
   // Fallback to localStorage or defaults

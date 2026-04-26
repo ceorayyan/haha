@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add core Rayyan.ai features to the systematic review platform while maintaining the existing dark theme UI and removing data extraction functionality.
+Add core Rayyan.ai features to the systematic review and meta analysis platform while maintaining the existing dark theme UI and removing data extraction functionality.
 
 ## High-Level Design
 

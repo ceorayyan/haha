@@ -1,12 +1,56 @@
 // API Configuration and Helper Functions
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+// Multiple backend URLs with fallback support
+const API_URLS = [
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api',
+  'https://backend-of-research-nexus-ai.free.laravel.cloud/api',
+  'https://api.statanex.com/api',
+];
 
 // API Client with authentication
 class ApiClient {
   private baseUrl: string;
+  private availableUrls: string[];
+  private currentUrlIndex: number = 0;
 
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
+  constructor(baseUrls: string[]) {
+    this.availableUrls = baseUrls;
+    this.baseUrl = this.getStoredBaseUrl() || baseUrls[0];
+    this.currentUrlIndex = baseUrls.indexOf(this.baseUrl);
+  }
+
+  private getStoredBaseUrl(): string | null {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('api_base_url');
+    }
+    return null;
+  }
+
+  private setStoredBaseUrl(url: string): void {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('api_base_url', url);
+    }
+  }
+
+  private async tryNextUrl(): Promise<void> {
+    this.currentUrlIndex = (this.currentUrlIndex + 1) % this.availableUrls.length;
+    this.baseUrl = this.availableUrls[this.currentUrlIndex];
+    this.setStoredBaseUrl(this.baseUrl);
+  }
+
+  public getCurrentBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  public getAvailableUrls(): string[] {
+    return this.availableUrls;
+  }
+
+  public setBaseUrl(url: string): void {
+    if (this.availableUrls.includes(url)) {
+      this.baseUrl = url;
+      this.currentUrlIndex = this.availableUrls.indexOf(url);
+      this.setStoredBaseUrl(url);
+    }
   }
 
   private getHeaders(includeAuth: boolean = true): HeadersInit {
@@ -53,48 +97,67 @@ class ApiClient {
     const url = `${this.baseUrl}${endpoint}`;
     const headers = this.getHeaders(includeAuth);
 
-    try {
-      const response = await fetch(url, {
-        ...options,
-        headers: {
-          ...headers,
-          ...options.headers,
-        },
-      });
+    let lastError: any;
+    let attempts = 0;
+    const maxAttempts = this.availableUrls.length;
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          this.removeToken();
-          if (typeof window !== 'undefined') {
-            window.location.href = '/login';
+    while (attempts < maxAttempts) {
+      try {
+        const response = await fetch(url.replace(this.availableUrls[this.currentUrlIndex], this.baseUrl), {
+          ...options,
+          headers: {
+            ...headers,
+            ...options.headers,
+          },
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            this.removeToken();
+            if (typeof window !== 'undefined') {
+              window.location.href = '/login';
+            }
+            throw new Error('Authentication required. Please log in again.');
           }
-          throw new Error('Authentication required. Please log in again.');
+
+          if (response.status === 403) {
+            throw new Error('You do not have permission to access this resource.');
+          }
+
+          const error = await response.json().catch(() => ({
+            message: 'An error occurred',
+          }));
+          
+          const errorMessage = error.message || 
+                             error.errors?.[Object.keys(error.errors)[0]]?.[0] || 
+                             `Request failed with status ${response.status}`;
+          
+          throw new Error(errorMessage);
         }
 
-        if (response.status === 403) {
-          throw new Error('You do not have permission to access this resource.');
+        // Request successful, return response
+        return await response.json();
+      } catch (error: any) {
+        console.error(`API Request Error (${this.baseUrl}):`, error);
+        lastError = error;
+
+        // If it's a network error, try the next URL
+        if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+          attempts++;
+          if (attempts < maxAttempts) {
+            console.log(`Trying next API URL (attempt ${attempts + 1}/${maxAttempts})...`);
+            await this.tryNextUrl();
+            continue;
+          }
+        } else {
+          // For non-network errors, throw immediately
+          throw error;
         }
-
-        const error = await response.json().catch(() => ({
-          message: 'An error occurred',
-        }));
-        
-        const errorMessage = error.message || 
-                           error.errors?.[Object.keys(error.errors)[0]]?.[0] || 
-                           `Request failed with status ${response.status}`;
-        
-        throw new Error(errorMessage);
       }
-
-      return await response.json();
-    } catch (error: any) {
-      console.error('API Request Error:', error);
-      // Re-throw with a more user-friendly message if it's a network error
-      if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
-        throw new Error('Unable to connect to the server. Please check your internet connection.');
-      }
-      throw error;
     }
+
+    // All URLs failed
+    throw new Error('Unable to connect to any server. Please check your internet connection.');
   }
 
   // Auth Methods
@@ -360,5 +423,5 @@ class ApiClient {
   }
 }
 
-export const api = new ApiClient(API_BASE_URL);
+export const api = new ApiClient(API_URLS);
 export default api;

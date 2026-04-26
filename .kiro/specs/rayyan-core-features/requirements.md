@@ -2,7 +2,7 @@
 
 ## Feature Overview
 
-Enhance the Rayyan.ai clone systematic review platform by adding core features from Rayyan.ai while maintaining the existing dark theme UI and removing data extraction functionality.
+Enhance the Rayyan.ai clone systematic review and meta analysis platform by adding core features from Rayyan.ai while maintaining the existing dark theme UI and removing data extraction functionality.
 
 ## Functional Requirements
 

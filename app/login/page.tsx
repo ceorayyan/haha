@@ -67,7 +67,7 @@ export default function LoginPage() {
             {branding.website_name}
           </h1>
           <p className="text-zinc-500 mt-2 text-sm">
-            Systematic Review Platform
+            Systematic review and meta analysis
           </p>
         </div>
 

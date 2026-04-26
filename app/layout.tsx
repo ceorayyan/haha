@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Review Manager - Systematic Review Platform",
-  description: "Systematic Review Management System",
+  title: "Review Manager - Systematic review and meta analysis",
+  description: "Systematic review and meta analysis System",
   icons: {
     icon: "/favicon.png",
     apple: "/favicon.png",
@@ -33,6 +33,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
+      data-scroll-behavior="smooth"
     >
       <head>
         <link rel="icon" href="/favicon.png" type="image/png" />

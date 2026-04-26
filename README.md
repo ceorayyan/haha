@@ -1,10 +1,10 @@
-# Rayyan.ai Clone - Systematic Review Platform
+# Rayyan.ai Clone - Systematic review and meta analysis
 
-A complete, production-ready implementation of a systematic review management platform inspired by Rayyan.ai. Built with Next.js, TypeScript, and Tailwind CSS with a modern dark theme.
+A complete, production-ready implementation of a systematic review and meta analysis platform inspired by Rayyan.ai. Built with Next.js, TypeScript, and Tailwind CSS with a modern dark theme.
 
 ## 🎯 Overview
 
-This is a full-featured systematic review platform that helps researchers manage, screen, and analyze academic articles for systematic reviews and literature reviews. The platform supports team collaboration, article screening, conflict resolution, and data export.
+This is a full-featured systematic review and meta analysis platform that helps researchers manage, screen, and analyze academic articles for systematic reviews and literature reviews. The platform supports team collaboration, article screening, conflict resolution, and data export.
 
 ## ✨ Key Features
 

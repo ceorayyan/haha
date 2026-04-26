@@ -16,7 +16,7 @@ interface ThemeProviderProps {
 }
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>('dark');
+  const [theme, setTheme] = useState<Theme>('light');
   const [mounted, setMounted] = useState(false);
 
   // Initialize theme from localStorage on mount
@@ -28,11 +28,11 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
         if (storedTheme === 'dark' || storedTheme === 'light') {
           setTheme(storedTheme);
         } else {
-          setTheme('dark'); // Default to dark theme
+          setTheme('light'); // Default to light theme
         }
       } catch (error) {
         console.warn('Failed to read theme from localStorage:', error);
-        setTheme('dark');
+        setTheme('light');
       }
     };
     
