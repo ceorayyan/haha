@@ -13,11 +13,17 @@ interface HeaderProps {
   showTitle?: boolean;
 }
 
+type StoredUser = {
+  id?: number;
+  name?: string;
+  email?: string;
+};
+
 export default function Header({ onMenuClick, title, showTitle = true }: HeaderProps) {
-  const { user, blindMode, toggleBlindMode } = useData();
+  const { blindMode, toggleBlindMode } = useData();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [branding, setBranding] = useState<BrandingConfig | null>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<StoredUser | null>(() => api.getStoredUser());
   const router = useRouter();
 
   const userInitial = currentUser?.name?.charAt(0).toUpperCase() || "U";

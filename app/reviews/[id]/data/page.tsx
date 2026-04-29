@@ -2,16 +2,14 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
+import toast, { Toaster } from 'react-hot-toast';
 import api from "@/lib/api";
-
-interface Duplicate {
-  article1_id: number;
-  article2_id: number;
-  article1_title: string;
-  article2_title: string;
-  similarity: number;
-  reason: string;
-}
+import DuplicateTable from "@/components/DuplicateTable";
+import type { DuplicateTableHandle } from "@/components/DuplicateTable";
+import SidebarCounters from "@/components/SidebarCounters";
+import ActionBar from "@/components/ActionBar";
+import type { StatusCounts } from "@/types/duplicate";
+import ManualDuplicateResolveModal, { type DuplicateResolvePair } from "@/components/ManualDuplicateResolveModal";
 
 interface Article {
   id: number;
@@ -21,8 +19,13 @@ interface Article {
   url?: string;
   screening_decision?: string;
   screening_notes?: string;
+  labels?: string[];       // persisted array from DB
   created_at: string;
   file_path?: string;
+  // UI display fields — populated from DB on fetch, updated optimistically
+  _note?: string;
+  _noteAuthor?: string;
+  _labels?: string[];
 }
 
 interface ImportedFile {
@@ -34,7 +37,7 @@ interface ImportedFile {
 export default function ReviewDataPage() {
   const params = useParams();
   const reviewId = Number(params.id);
-  
+
   const [loading, setLoading] = useState(true);
   const [articles, setArticles] = useState<Article[]>([]);
   const [showFilters, setShowFilters] = useState(true);
@@ -48,34 +51,68 @@ export default function ReviewDataPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalArticles, setTotalArticles] = useState(0);
   const [selectedArticles, setSelectedArticles] = useState<number[]>([]);
-  const [duplicates, setDuplicates] = useState<Duplicate[]>([]);
+  const [activeArticleId, setActiveArticleId] = useState<number | null>(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [detectingDuplicates, setDetectingDuplicates] = useState(false);
+  const [showDuplicatesInTable, setShowDuplicatesInTable] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('unresolved');
+  const [duplicateCounts, setDuplicateCounts] = useState<StatusCounts>({
+    unresolved: 0,
+    deleted: 0,
+    not_duplicate: 0,
+    resolved: 0,
+    total: 0,
+  });
+  const [showRerunModal, setShowRerunModal] = useState(false);
+  const [incrementalOnly, setIncrementalOnly] = useState(false);
   const [selectedArticleModal, setSelectedArticleModal] = useState<Article | null>(null);
   const [bulkLabel, setBulkLabel] = useState<string>("");
   const [bulkNotes, setBulkNotes] = useState<string>("");
   const [customIncludeKeyword, setCustomIncludeKeyword] = useState<string>("");
   const [customExcludeKeyword, setCustomExcludeKeyword] = useState<string>("");
+  const [showIncludeInput, setShowIncludeInput] = useState(false);
+  const [showExcludeInput, setShowExcludeInput] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<number | null>(null);
   const [customLabel, setCustomLabel] = useState<string>("");
   const [importedFiles, setImportedFiles] = useState<ImportedFile[]>([]);
+  const [importedRefsDropdownOpen, setImportedRefsDropdownOpen] = useState(false);
+  const [selectedImportedRefPath, setSelectedImportedRefPath] = useState<string>("__all__");
   const [showAddReferencesModal, setShowAddReferencesModal] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const duplicateTableRef = useRef<DuplicateTableHandle>(null);
+  const [selectedDuplicateIds, setSelectedDuplicateIds] = useState<number[]>([]);
+  const [activeDuplicateId, setActiveDuplicateId] = useState<number | null>(null);
+  const [clearDuplicateSelection, setClearDuplicateSelection] = useState(false);
+  const [showManualDuplicateResolve, setShowManualDuplicateResolve] = useState(false);
+  const [duplicateResolveQueue, setDuplicateResolveQueue] = useState<DuplicateResolvePair[]>([]);
+  const [duplicateResolveIndex, setDuplicateResolveIndex] = useState(0);
+  const [manualDuplicateResolvingId, setManualDuplicateResolvingId] = useState<number | null>(null);
+  const [showLabelDialog, setShowLabelDialog] = useState(false);
+  const [labelInput, setLabelInput] = useState("");
+  // Shared dynamic label list across both tables (user-created custom labels only; suggested ones live in ActionBar)
+  const [globalLabels, setGlobalLabels] = useState<string[]>([]);
+  // Popup state for viewing notes/labels in article rows
+  const [articleNotePopup, setArticleNotePopup] = useState<number | null>(null);
+  const [articleLabelPopup, setArticleLabelPopup] = useState<number | null>(null);
 
-  // Fetch data and imported files
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
         const articlesData = await api.getArticles(reviewId, currentPage, 100);
         const articlesArray = Array.isArray(articlesData) ? articlesData : articlesData?.data || [];
-        setArticles(articlesArray);
+        // Map persisted DB fields to UI display fields so labels/notes survive refresh
+        const mappedArticles = articlesArray.map((a: Article) => ({
+          ...a,
+          _labels: a.labels && a.labels.length > 0 ? a.labels : a._labels,
+          _note: a.screening_notes || a._note,
+        }));
+        setArticles(mappedArticles);
         setTotalPages(articlesData?.last_page || 1);
         setTotalArticles(articlesData?.total || articlesArray.length);
 
-        // Group articles by file_path to show imported files
         const fileMap = new Map<string, number>();
         articlesArray.forEach((article: Article) => {
           if (article.file_path) {
@@ -83,7 +120,6 @@ export default function ReviewDataPage() {
           }
         });
 
-        // Convert to ImportedFile array
         const files: ImportedFile[] = Array.from(fileMap.entries()).map(([path, count]) => ({
           name: path.split('/').pop() || 'Unknown',
           count,
@@ -96,23 +132,37 @@ export default function ReviewDataPage() {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [reviewId, currentPage]);
 
-  // Extract keywords from articles
+  // Fetch duplicate counts on mount
+  useEffect(() => {
+    fetchDuplicateCounts();
+  }, [reviewId]);
+
+  // When switching duplicate views, reset active single-selection so the table can auto-pick row 1.
+  useEffect(() => {
+    if (showDuplicatesInTable) setActiveDuplicateId(null);
+  }, [showDuplicatesInTable, statusFilter]);
+
+  const fetchDuplicateCounts = async () => {
+    try {
+      const counts = await api.getDuplicateCounts(reviewId);
+      setDuplicateCounts(counts);
+    } catch (error) {
+      console.error("Failed to fetch duplicate counts:", error);
+    }
+  };
+
   const extractKeywords = () => {
     const keywordMap = new Map<string, number>();
-    
     articles.forEach(article => {
       const text = `${article.title} ${article.authors || ""} ${article.abstract || ""}`.toLowerCase();
       const words = text.match(/\b\w{4,}\b/g) || [];
-      
       words.forEach(word => {
         keywordMap.set(word, (keywordMap.get(word) || 0) + 1);
       });
     });
-
     return Array.from(keywordMap.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 20)
@@ -121,32 +171,24 @@ export default function ReviewDataPage() {
 
   const keywords = extractKeywords();
 
-  // Highlight keywords in text
   const highlightText = (text: string) => {
     if (!text) return text;
-    
     let highlightedText = text;
-    
-    // Highlight include keywords (green)
     includeKeywords.forEach(keyword => {
       const regex = new RegExp(`\\b(${keyword})\\b`, 'gi');
       highlightedText = highlightedText.replace(regex, '<mark class="bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 px-1 rounded font-medium">$1</mark>');
     });
-    
-    // Highlight exclude keywords (red)
     excludeKeywords.forEach(keyword => {
       const regex = new RegExp(`\\b(${keyword})\\b`, 'gi');
       highlightedText = highlightedText.replace(regex, '<mark class="bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 px-1 rounded font-medium">$1</mark>');
     });
-    
     return highlightedText;
   };
 
-  // Filter and sort articles
   const filteredArticles = articles.filter(article => {
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();
-      const matchesSearch = 
+      const matchesSearch =
         article.title?.toLowerCase().includes(searchLower) ||
         article.authors?.toLowerCase().includes(searchLower);
       if (!matchesSearch) return false;
@@ -161,37 +203,54 @@ export default function ReviewDataPage() {
     return 0;
   });
 
+  // Auto-select the first visible article row (single-click selection).
+  useEffect(() => {
+    if (showDuplicatesInTable) return;
+    const firstId = sortedArticles[0]?.id ?? null;
+    if (!firstId) return;
+    setActiveArticleId((prev) => {
+      if (prev !== null && sortedArticles.some((a) => a.id === prev)) return prev;
+      return firstId;
+    });
+  }, [showDuplicatesInTable, sortedArticles]);
+
   const decisionDot = (d: string | null) => {
-    if (d === "include") return <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" />;
-    if (d === "exclude") return <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500" />;
-    if (d === "maybe") return <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-400" />;
-    return <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600" />;
+    if (d === "include") return <span className="inline-block w-2 h-2 rounded-full bg-green-500" />;
+    if (d === "exclude") return <span className="inline-block w-2 h-2 rounded-full bg-red-500" />;
+    if (d === "maybe") return <span className="inline-block w-2 h-2 rounded-full bg-orange-400" />;
+    return <span className="inline-block w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600" />;
   };
 
   const toggleIncludeKeyword = (keyword: string) => {
-    setIncludeKeywords(prev => 
+    setIncludeKeywords(prev =>
       prev.includes(keyword) ? prev.filter(k => k !== keyword) : [...prev, keyword]
     );
   };
 
   const toggleExcludeKeyword = (keyword: string) => {
-    setExcludeKeywords(prev => 
+    setExcludeKeywords(prev =>
       prev.includes(keyword) ? prev.filter(k => k !== keyword) : [...prev, keyword]
     );
   };
 
   const addCustomIncludeKeyword = () => {
-    if (customIncludeKeyword.trim() && !includeKeywords.includes(customIncludeKeyword.trim())) {
-      setIncludeKeywords(prev => [...prev, customIncludeKeyword.trim()]);
-      setCustomIncludeKeyword("");
-    }
+    const words = customIncludeKeyword.split(',').map(w => w.trim()).filter(Boolean);
+    words.forEach(word => {
+      if (!includeKeywords.includes(word)) {
+        setIncludeKeywords(prev => [...prev, word]);
+      }
+    });
+    setCustomIncludeKeyword("");
   };
 
   const addCustomExcludeKeyword = () => {
-    if (customExcludeKeyword.trim() && !excludeKeywords.includes(customExcludeKeyword.trim())) {
-      setExcludeKeywords(prev => [...prev, customExcludeKeyword.trim()]);
-      setCustomExcludeKeyword("");
-    }
+    const words = customExcludeKeyword.split(',').map(w => w.trim()).filter(Boolean);
+    words.forEach(word => {
+      if (!excludeKeywords.includes(word)) {
+        setExcludeKeywords(prev => [...prev, word]);
+      }
+    });
+    setCustomExcludeKeyword("");
   };
 
   const removeIncludeKeyword = (keyword: string) => {
@@ -215,26 +274,81 @@ export default function ReviewDataPage() {
 
   const handleDetectDuplicates = async () => {
     setDetectingDuplicates(true);
+    setShowDuplicateModal(false); // Close modal immediately when detection starts
+    
     try {
-      // Set a timeout of 5 minutes for large datasets (10k+ articles)
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Detection timeout - took too long (> 5 minutes)')), 300000)
-      );
+      const response = await api.detectDuplicatesEnhanced(reviewId);
+      console.log('Duplicate detection response:', response);
       
-      const response = await Promise.race([
-        api.detectDuplicates(reviewId),
-        timeoutPromise
-      ]);
+      // Fetch updated counts after detection
+      await fetchDuplicateCounts();
       
-      setDuplicates(response.data?.duplicates || []);
-      // Close the confirmation modal but don't show duplicates modal yet
-      // User will click "View Duplicates" button in sidebar to see results
-      setShowDuplicateModal(false);
+      // Show duplicates in table
+      setShowDuplicatesInTable(true);
+      
+      if (response?.data?.total_duplicates > 0) {
+        toast.success(`Found ${response.data.total_duplicates} duplicate pairs!`, {
+          duration: 4000,
+          position: 'bottom-right',
+        });
+      } else {
+        toast('No duplicates found!', {
+          icon: 'ℹ️',
+          duration: 3000,
+          position: 'bottom-right',
+        });
+      }
     } catch (error) {
       console.error("Failed to detect duplicates:", error);
-      alert(`Failed to detect duplicates: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error(`Failed to detect duplicates: ${error instanceof Error ? error.message : 'Unknown error'}`, {
+        duration: 5000,
+        position: 'bottom-right',
+      });
     } finally {
       setDetectingDuplicates(false);
+    }
+  };
+
+  const handleRerunDetection = async () => {
+    setDetectingDuplicates(true);
+    setShowRerunModal(false); // Close modal immediately when detection starts
+    
+    try {
+      const response = await api.detectDuplicatesEnhanced(reviewId, {
+        clearExisting: !incrementalOnly,
+        incrementalOnly: incrementalOnly,
+      });
+      console.log('Re-run detection response:', response);
+      
+      // Fetch updated counts after detection
+      await fetchDuplicateCounts();
+      
+      // Show duplicates in table
+      setShowDuplicatesInTable(true);
+      
+      if (response?.data?.total_duplicates > 0) {
+        const mode = incrementalOnly ? 'incremental' : 'full';
+        toast.success(`${mode.charAt(0).toUpperCase() + mode.slice(1)} re-run completed! Found ${response.data.total_duplicates} duplicate pairs.`, {
+          duration: 4000,
+          position: 'bottom-right',
+        });
+      } else {
+        const message = incrementalOnly ? 'No new duplicates found in recent articles.' : 'No duplicates found!';
+        toast(message, {
+          icon: 'ℹ️',
+          duration: 3000,
+          position: 'bottom-right',
+        });
+      }
+    } catch (error) {
+      console.error("Failed to re-run duplicate detection:", error);
+      toast.error(`Failed to re-run detection: ${error instanceof Error ? error.message : 'Unknown error'}`, {
+        duration: 5000,
+        position: 'bottom-right',
+      });
+    } finally {
+      setDetectingDuplicates(false);
+      setIncrementalOnly(false); // Reset checkbox
     }
   };
 
@@ -242,11 +356,137 @@ export default function ReviewDataPage() {
     try {
       await api.deleteArticle(articleId);
       setArticles(articles.filter(a => a.id !== articleId));
-      setDuplicates(duplicates.filter(d => d.article1_id !== articleId && d.article2_id !== articleId));
       setTotalArticles(totalArticles - 1);
+      // Refresh duplicate counts after deletion
+      await fetchDuplicateCounts();
     } catch (error) {
       console.error("Failed to delete article:", error);
     }
+  };
+
+  const handleBulkResolve = () => {
+    const selectedPairs = duplicateTableRef.current?.getSelectedDuplicatePairs() || [];
+    const allPairs = duplicateTableRef.current?.getAllDuplicatePairs() || [];
+    const pairs = selectedPairs.length > 0 ? selectedPairs : allPairs;
+    if (pairs.length === 0) return;
+    setDuplicateResolveQueue(pairs);
+    setDuplicateResolveIndex(0);
+    setManualDuplicateResolvingId(null);
+    setShowManualDuplicateResolve(true);
+  };
+
+  const handleManualDuplicateChoice = async (choice: "left" | "right" | "both") => {
+    const pair = duplicateResolveQueue[duplicateResolveIndex];
+    if (!pair || manualDuplicateResolvingId !== null) return;
+
+    setManualDuplicateResolvingId(pair.duplicateId);
+    try {
+      // Duplicate status mapping (pair-level):
+      // - Keep Left  -> Resolved tab
+      // - Keep Right -> Deleted tab
+      // - Keep Both  -> Not Duplicate tab
+      const nextDuplicateStatus = choice === "left" ? "resolved" : choice === "right" ? "deleted" : "not_duplicate";
+      await api.updateDuplicateStatus(pair.duplicateId, nextDuplicateStatus);
+
+      // Keep Left/Right: the unkept article should be deleted (so it won't appear in Screening later).
+      if (choice === "left") {
+        await api.deleteArticle(pair.right.articleId);
+        setArticles((prev) => prev.filter((a) => a.id !== pair.right.articleId));
+        setTotalArticles((prev) => Math.max(0, prev - 1));
+      } else if (choice === "right") {
+        await api.deleteArticle(pair.left.articleId);
+        setArticles((prev) => prev.filter((a) => a.id !== pair.left.articleId));
+        setTotalArticles((prev) => Math.max(0, prev - 1));
+      }
+
+      // Update UI immediately (no toasts on every action).
+      duplicateTableRef.current?.removeDuplicatePairs([pair.duplicateId]);
+      setSelectedDuplicateIds((prev) => prev.filter((id) => id !== pair.duplicateId));
+
+      // Keep sidebar counters accurate while stepping through.
+      await fetchDuplicateCounts();
+
+      const nextIndex = duplicateResolveIndex + 1;
+      if (nextIndex >= duplicateResolveQueue.length) {
+        setShowManualDuplicateResolve(false);
+        setDuplicateResolveQueue([]);
+        setDuplicateResolveIndex(0);
+        setSelectedDuplicateIds([]);
+        setClearDuplicateSelection(true);
+        setTimeout(() => setClearDuplicateSelection(false), 100);
+      } else {
+        setDuplicateResolveIndex(nextIndex);
+      }
+    } catch (error: any) {
+      console.error("Failed to resolve duplicate pair:", error);
+      toast.error(error?.message || "Failed to resolve duplicates");
+    } finally {
+      setManualDuplicateResolvingId(null);
+    }
+  };
+
+  const handleBulkLabel = async () => {
+    if (!labelInput.trim()) {
+      setShowLabelDialog(false);
+      return;
+    }
+    const label = labelInput.trim();
+    // Add to global label list if new
+    setGlobalLabels(prev => prev.includes(label) ? prev : [...prev, label]);
+
+    if (showDuplicatesInTable) {
+      const targets =
+        selectedDuplicateIds.length > 0
+          ? selectedDuplicateIds
+          : activeDuplicateId !== null
+            ? [activeDuplicateId]
+            : [];
+
+      if (targets.length === 0) { setShowLabelDialog(false); return; }
+
+      duplicateTableRef.current?.applyLabelToSelected(targets, label);
+      toast.success(`Label "${label}" applied to ${targets.length} item(s)!`, { duration: 3000, position: 'bottom-right' });
+
+      // Only clear checkbox selection if user was doing bulk selection.
+      if (selectedDuplicateIds.length > 0) {
+        setSelectedDuplicateIds([]);
+        setClearDuplicateSelection(true);
+        setTimeout(() => setClearDuplicateSelection(false), 100);
+      }
+    } else {
+      const targets =
+        selectedArticles.length > 0
+          ? selectedArticles
+          : activeArticleId !== null
+            ? [activeArticleId]
+            : [];
+
+      if (targets.length === 0) { setShowLabelDialog(false); return; }
+
+      setArticles(prev =>
+        prev.map(a =>
+          targets.includes(a.id)
+            ? { ...a, _labels: [...new Set([...(a._labels || []), label])] }
+            : a
+        )
+      );
+      toast.success(`Label "${label}" applied to ${targets.length} article(s)!`, { duration: 3000, position: 'bottom-right' });
+
+      // Only clear checkbox selection if user was doing bulk selection.
+      if (selectedArticles.length > 0) setSelectedArticles([]);
+    }
+    setLabelInput("");
+    setShowLabelDialog(false);
+  };
+
+  const handleSelectionChange = (ids: number[]) => {
+    setSelectedDuplicateIds(ids);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedDuplicateIds([]);
+    setClearDuplicateSelection(true);
+    setTimeout(() => setClearDuplicateSelection(false), 100);
   };
 
   const uploadArticles = async () => {
@@ -254,12 +494,10 @@ export default function ReviewDataPage() {
       setShowAddReferencesModal(false);
       return;
     }
-
     setUploading(true);
     try {
       let successCount = 0;
       let failureCount = 0;
-      
       for (const file of selectedFiles) {
         try {
           const formData = new FormData();
@@ -272,16 +510,12 @@ export default function ReviewDataPage() {
           failureCount++;
         }
       }
-      
-      // Refresh the articles data
       const articlesData = await api.getArticles(reviewId, 1, 100);
       const articlesArray = Array.isArray(articlesData) ? articlesData : articlesData?.data || [];
       setArticles(articlesArray);
       setTotalPages(articlesData?.last_page || 1);
       setTotalArticles(articlesData?.total || articlesArray.length);
       setCurrentPage(1);
-
-      // Refresh imported files
       const fileMap = new Map<string, number>();
       articlesArray.forEach((article: Article) => {
         if (article.file_path) {
@@ -294,13 +528,11 @@ export default function ReviewDataPage() {
         file_path: path,
       }));
       setImportedFiles(files);
-      
       if (failureCount > 0) {
         alert(`Uploaded ${successCount} article(s). Failed to upload ${failureCount} article(s).`);
       } else {
         alert(`Successfully uploaded ${successCount} article(s)!`);
       }
-      
       setShowAddReferencesModal(false);
       setSelectedFiles([]);
     } catch (error) {
@@ -313,23 +545,17 @@ export default function ReviewDataPage() {
 
   const deleteImportedFile = async (filePath: string) => {
     if (!confirm("Delete all articles from this file?")) return;
-    
     try {
-      // Find all articles with this file_path and delete them
       const articlesToDelete = articles.filter(a => a.file_path === filePath);
       for (const article of articlesToDelete) {
         await api.deleteArticle(article.id);
       }
-      
-      // Refresh data
       const articlesData = await api.getArticles(reviewId, 1, 100);
       const articlesArray = Array.isArray(articlesData) ? articlesData : articlesData?.data || [];
       setArticles(articlesArray);
       setTotalPages(articlesData?.last_page || 1);
       setTotalArticles(articlesData?.total || articlesArray.length);
       setCurrentPage(1);
-
-      // Refresh imported files
       const fileMap = new Map<string, number>();
       articlesArray.forEach((article: Article) => {
         if (article.file_path) {
@@ -342,6 +568,9 @@ export default function ReviewDataPage() {
         file_path: path,
       }));
       setImportedFiles(files);
+      // If the currently selected dropdown item was deleted, fall back to "All References".
+      setSelectedImportedRefPath((prev) => (prev === filePath ? "__all__" : prev));
+      setImportedRefsDropdownOpen(false);
     } catch (error) {
       console.error("Failed to delete file articles:", error);
       alert("Failed to delete articles. Please try again.");
@@ -350,27 +579,59 @@ export default function ReviewDataPage() {
 
   const handleBulkUpdate = async () => {
     if (selectedArticles.length === 0) return;
-    
     try {
       const updateData: any = { article_ids: selectedArticles };
       if (bulkLabel) updateData.screening_decision = bulkLabel;
       if (bulkNotes) updateData.screening_notes = bulkNotes;
-      
       await api.bulkUpdateArticles(reviewId, updateData);
-      
-      // Update local articles
-      setArticles(articles.map(a => 
-        selectedArticles.includes(a.id) 
+      setArticles(articles.map(a =>
+        selectedArticles.includes(a.id)
           ? { ...a, screening_decision: bulkLabel || a.screening_decision, screening_notes: bulkNotes || a.screening_notes }
           : a
       ));
-      
       setSelectedArticles([]);
       setBulkLabel("");
       setBulkNotes("");
     } catch (error) {
       console.error("Failed to bulk update articles:", error);
     }
+  };
+
+  const handleBulkResolveDuplicates = async () => {
+    if (selectedDuplicateIds.length === 0) return;
+    
+    try {
+      // No bulk-resolve endpoint exists — resolve each pair individually
+      await Promise.all(
+        selectedDuplicateIds.map(id => api.updateDuplicateStatus(id, 'resolved'))
+      );
+      
+      // Refresh duplicate counts
+      await fetchDuplicateCounts();
+      
+      // Remove resolved pairs from the table
+      duplicateTableRef.current?.removeDuplicatePairs(selectedDuplicateIds);
+
+      // Clear selection
+      setSelectedDuplicateIds([]);
+      setClearDuplicateSelection(true);
+      setTimeout(() => setClearDuplicateSelection(false), 100);
+
+      toast.success(`Resolved ${selectedDuplicateIds.length} duplicate pair(s)!`, { duration: 3000, position: 'bottom-right' });
+    } catch (error) {
+      console.error("Failed to bulk resolve duplicates:", error);
+      toast.error(`Failed to resolve duplicates: ${error instanceof Error ? error.message : 'Unknown error'}`, { duration: 4000, position: 'bottom-right' });
+    }
+  };
+
+  const handleBulkLabelDuplicates = async () => {
+    // This is now handled inline by the ActionBar onLabel handler — kept for reference only
+  };
+
+  const handleClearDuplicateSelection = () => {
+    setSelectedDuplicateIds([]);
+    setClearDuplicateSelection(true);
+    setTimeout(() => setClearDuplicateSelection(false), 100);
   };
 
   const toggleSelectAll = () => {
@@ -387,664 +648,842 @@ export default function ReviewDataPage() {
     );
   };
 
-  // Decision counts
-  const decisionCounts = {
-    included: articles.filter(a => a.screening_decision === "include").length,
-    excluded: articles.filter(a => a.screening_decision === "exclude").length,
-    maybe: articles.filter(a => a.screening_decision === "maybe").length,
-    undecided: articles.filter(a => !a.screening_decision).length,
-  };
-
-  // Skeleton components
   const SkeletonRow = () => (
-    <tr className="animate-pulse">
-      <td className="px-5 py-4">
-        <div className="w-4 h-4 bg-[var(--surface-2)] rounded"></div>
-      </td>
-      <td className="px-4 py-4">
-        <div className="w-8 h-4 bg-[var(--surface-2)] rounded"></div>
-      </td>
-      <td className="px-5 py-4">
-        <div className="space-y-2">
-          <div className="h-4 bg-[var(--surface-2)] rounded w-3/4"></div>
-          <div className="h-3 bg-[var(--surface-2)] rounded w-1/2"></div>
+    <tr className="animate-pulse border-b border-[var(--border-subtle)]">
+      <td className="px-4 py-3.5"><div className="w-3.5 h-3.5 bg-[var(--surface-2)] rounded" /></td>
+      <td className="px-3 py-3.5"><div className="w-5 h-3 bg-[var(--surface-2)] rounded" /></td>
+      <td className="px-4 py-3.5">
+        <div className="space-y-1.5">
+          <div className="h-3.5 bg-[var(--surface-2)] rounded w-3/4" />
+          <div className="h-3 bg-[var(--surface-2)] rounded w-2/5" />
         </div>
       </td>
-      <td className="px-5 py-4">
-        <div className="h-4 bg-[var(--surface-2)] rounded w-32"></div>
-      </td>
+      <td className="px-4 py-3.5"><div className="h-3 bg-[var(--surface-2)] rounded w-16" /></td>
+      <td className="px-4 py-3.5"><div className="h-3 bg-[var(--surface-2)] rounded w-20" /></td>
     </tr>
   );
 
+  const SideStatRow = ({
+    icon, label, count, active = false, onClick
+  }: { icon: React.ReactNode; label: string; count: number; active?: boolean; onClick?: () => void }) => (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+        active
+          ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+          : "hover:bg-[var(--surface-2)] text-[var(--text-secondary)]"
+      }`}
+    >
+      <div className="flex items-center gap-2.5">{icon}<span className="font-medium text-xs">{label}</span></div>
+      <span className="text-xs font-semibold tabular-nums text-[var(--text-muted)]">{count}</span>
+    </button>
+  );
+
   return (
-    <div className="h-full overflow-hidden flex bg-[var(--surface-1)]">
+    <>
+      <Toaster />
+      <div className="h-full overflow-hidden flex bg-[var(--surface-1)]">
 
-      {/* ── Left sidebar */}
-      <div className={`${treeOpen ? 'w-80' : 'w-16'} shrink-0 border-r border-[var(--border-subtle)] flex flex-col overflow-hidden bg-white dark:bg-[var(--surface-1)] shadow-sm transition-all duration-300`}>
-
-        {/* Sidebar toggle button */}
-        <div className="px-4 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
-          <button 
+      {/* LEFT SIDEBAR */}
+      <aside className={`${treeOpen ? "w-64" : "w-12"} shrink-0 border-r border-[var(--border-subtle)] flex flex-col overflow-hidden bg-white dark:bg-[var(--surface-1)] transition-all duration-200`}>
+        <div className="h-12 px-3 flex items-center border-b border-[var(--border-subtle)] shrink-0">
+          {treeOpen && <span className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-widest flex-1">All Data</span>}
+          <button
             onClick={() => setTreeOpen(!treeOpen)}
-            className="p-2 hover:bg-[var(--surface-2)] rounded-lg transition-colors"
-            title={treeOpen ? "Collapse sidebar" : "Expand sidebar"}>
-            <svg className={`w-5 h-5 text-[var(--text-secondary)] transition-transform ${treeOpen ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            className="p-1.5 rounded-md hover:bg-[var(--surface-2)] transition-colors ml-auto"
+          >
+            <svg className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${treeOpen ? "" : "rotate-180"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          {treeOpen && (
-            <span className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">All Data</span>
-          )}
         </div>
 
         {treeOpen && (
-          <>
-            {/* Showing count */}
-            <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center gap-3">
-              <div className="w-10 h-10 bg-[var(--accent-soft)] rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex-1 overflow-y-auto">
+            {/* Count */}
+            <div className="px-4 py-4 border-b border-[var(--border-subtle)]">
+              <div className="flex items-center gap-2 mb-1">
+                <svg className="w-3.5 h-3.5 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
+                <span className="text-xs text-[var(--text-muted)] font-medium">Articles</span>
               </div>
-              <div>
-                <p className="text-lg font-bold text-[var(--text-primary)]">Showing {sortedArticles.length} / {totalArticles}</p>
-                <p className="text-xs text-[var(--text-muted)]">Articles</p>
-              </div>
+              <p className="text-xl font-bold text-[var(--text-primary)] tabular-nums">
+                {sortedArticles.length.toLocaleString()}
+                <span className="text-sm font-normal text-[var(--text-muted)] ml-1">/ {totalArticles.toLocaleString()}</span>
+              </p>
             </div>
 
-            {/* Imported references */}
-            <div className="px-5 py-4 border-b border-[var(--border-subtle)]">
-              <button onClick={() => setTreeOpen((v) => !v)}
-                className="w-full flex items-center justify-between py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors mb-3">
-                <div className="flex items-center gap-2.5">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {/* Imported References */}
+            <div className="px-3 py-3 border-b border-[var(--border-subtle)]">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                   </svg>
-                  <span className="font-semibold">Imported References</span>
+                  Imported Refs
                 </div>
-                <svg className={`w-4 h-4 transition-transform ${dupOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {/* File list */}
-              <div className="space-y-1 mb-4">
-                <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-[var(--surface-2)] text-sm">
-                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                    <svg className="w-4 h-4 text-[var(--text-muted)] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <span className="text-[var(--text-primary)] font-semibold truncate">All References</span>
-                  </div>
-                  <span className="text-[var(--text-secondary)] font-medium ml-2">{totalArticles}</span>
-                </div>
-
-                {/* Dynamic imported files */}
-                {importedFiles.map((file, idx) => (
-                  <div key={idx} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[var(--surface-2)] text-sm group transition-colors">
-                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                      <svg className="w-4 h-4 text-[var(--text-muted)] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <span className="text-[var(--text-secondary)] truncate">{file.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[var(--text-muted)] font-medium">{file.count}</span>
-                      <button 
-                        onClick={() => deleteImportedFile(file.file_path || '')}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 dark:hover:bg-red-950 rounded transition-all">
-                        <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                ))}
               </div>
 
-              <button 
+              <div className="relative">
+                <button
+                  onClick={() => setImportedRefsDropdownOpen((v) => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--surface-2)] text-sm border border-[var(--border-subtle)] hover:bg-[var(--surface-2)] transition-colors"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <svg className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <span className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                      {selectedImportedRefPath === "__all__"
+                        ? "All References"
+                        : importedFiles.find((f) => f.file_path === selectedImportedRefPath)?.name || "Selected File"}
+                    </span>
+                  </div>
+                  <span className="text-xs font-bold text-[var(--text-secondary)] tabular-nums shrink-0">
+                    {selectedImportedRefPath === "__all__"
+                      ? totalArticles.toLocaleString()
+                      : importedFiles.find((f) => f.file_path === selectedImportedRefPath)?.count?.toLocaleString() || "0"}
+                  </span>
+                </button>
+
+                {importedRefsDropdownOpen && (
+                  <div
+                    className="absolute z-[60] mt-2 w-full rounded-lg border border-[var(--border-subtle)] bg-white dark:bg-[var(--surface-1)] shadow-lg overflow-hidden"
+                    style={{ maxHeight: 260 }}
+                  >
+                    <button
+                      onClick={() => {
+                        setSelectedImportedRefPath("__all__");
+                        setImportedRefsDropdownOpen(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-xs flex items-center justify-between hover:bg-[var(--surface-2)] transition-colors ${
+                        selectedImportedRefPath === "__all__" ? "bg-[var(--accent-soft)]" : ""
+                      }`}
+                      style={{ color: "var(--text-primary)" }}
+                    >
+                      <span className="truncate">All References</span>
+                      <span className="text-[var(--text-secondary)] tabular-nums">{totalArticles.toLocaleString()}</span>
+                    </button>
+
+                    <div className="max-h-60 overflow-y-auto">
+                      {importedFiles.map((file) => (
+                        <div
+                          key={file.file_path}
+                          className="px-2 py-1 hover:bg-[var(--surface-2)] transition-colors group flex items-center justify-between"
+                        >
+                          <button
+                            onClick={() => {
+                              setSelectedImportedRefPath(file.file_path || "");
+                              setImportedRefsDropdownOpen(false);
+                            }}
+                            className="flex-1 min-w-0 px-3 py-2 text-left"
+                            style={{ color: "var(--text-primary)" }}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <svg className="w-3 h-3 text-[var(--text-muted)] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span className="text-xs truncate">{file.name}</span>
+                              </div>
+                              <span className="text-[var(--text-muted)] tabular-nums text-xs shrink-0">{file.count}</span>
+                            </div>
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteImportedFile(file.file_path || "");
+                            }}
+                            className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-100 dark:hover:bg-red-950/60 rounded transition-all shrink-0"
+                            aria-label={`Delete imported file ${file.name}`}
+                          >
+                            <svg className="w-3.5 h-3.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button
                 onClick={() => setShowAddReferencesModal(true)}
-                className="w-full py-2.5 text-sm bg-[var(--accent-soft)] text-[var(--accent)] rounded-lg hover:bg-[var(--accent)] hover:text-white transition-colors font-semibold border border-[var(--accent-border)]">
+                className="mt-2 w-full py-2 text-xs font-semibold text-[var(--accent)] bg-[var(--accent-soft)] rounded-lg hover:bg-[var(--accent)] hover:text-white transition-colors border border-[var(--accent-border)]"
+              >
                 + Add References
               </button>
             </div>
 
-            {/* Duplicates */}
-            <div className="px-5 py-4 border-b border-[var(--border-subtle)]">
-              <button onClick={() => setDupOpen((v) => !v)}
-                className="w-full flex items-center justify-between text-sm mb-3">
-                <div className="flex items-center gap-2.5 text-[var(--text-secondary)]">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {/* Possible Duplicates */}
+            <div className="px-3 py-3">
+              <button
+                onClick={() => setDupOpen(v => !v)}
+                className="w-full flex items-center justify-between mb-2 px-1"
+              >
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
-                  <span className="font-semibold">Possible Duplicates</span>
+                  Possible Dups
                 </div>
-                <svg className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${dupOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-3.5 h-3.5 text-[var(--text-muted)] transition-transform ${dupOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
+
               {dupOpen && (
-                <div className="space-y-3">
-                  {duplicates.length === 0 ? (
-                    <>
-                      <div className="flex items-center justify-between px-3 py-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-4 h-4 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <span className="text-[var(--text-secondary)]">Unresolved</span>
-                        </div>
-                        <span className="text-[var(--text-muted)] font-medium">0</span>
-                      </div>
-                      <div className="flex items-center justify-between px-3 py-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-4 h-4 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          <span className="text-[var(--text-secondary)]">Deleted</span>
-                        </div>
-                        <span className="text-[var(--text-muted)] font-medium">0</span>
-                      </div>
-                      <div className="flex items-center justify-between px-3 py-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-4 h-4 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                          <span className="text-[var(--text-secondary)]">Not Duplicate</span>
-                        </div>
-                        <span className="text-[var(--text-muted)] font-medium">0</span>
-                      </div>
-                      <div className="flex items-center justify-between px-3 py-2 text-sm">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-4 h-4 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span className="text-[var(--text-secondary)]">Resolved</span>
-                        </div>
-                        <span className="text-[var(--text-muted)] font-medium">0</span>
-                      </div>
-                      <button 
+                <div className="space-y-0.5">
+                  <SidebarCounters
+                    counts={duplicateCounts}
+                    activeStatus={statusFilter}
+                    onStatusClick={(status) => {
+                      setStatusFilter(status);
+                      setShowDuplicatesInTable(true);
+                    }}
+                  />
+                  <div className="pt-1">
+                    {duplicateCounts.total === 0 ? (
+                      <button
                         onClick={() => setShowDuplicateModal(true)}
-                        className="w-full py-2.5 text-sm bg-[var(--accent-soft)] text-[var(--accent)] rounded-lg hover:bg-[var(--accent)] hover:text-white transition-colors font-semibold border border-[var(--accent-border)]">
+                        className="w-full py-2 text-xs font-semibold text-[var(--accent)] bg-[var(--accent-soft)] rounded-lg hover:bg-[var(--accent)] hover:text-white transition-colors border border-[var(--accent-border)]"
+                      >
                         Detect Duplicates
                       </button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between px-3 py-2 text-sm bg-yellow-50 dark:bg-yellow-950/30 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <svg className="w-4 h-4 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <span className="text-yellow-700 dark:text-yellow-300 font-semibold">Unresolved</span>
-                        </div>
-                        <span className="text-yellow-700 dark:text-yellow-300 font-bold">{duplicates.length}</span>
+                    ) : (
+                      <div className="space-y-1">
+                        <button
+                          onClick={() => setShowRerunModal(true)}
+                          className="w-full py-2 text-xs font-semibold text-[var(--accent)] bg-[var(--accent-soft)] rounded-lg hover:bg-[var(--accent)] hover:text-white transition-colors border border-[var(--accent-border)]"
+                        >
+                          Re-run Detection
+                        </button>
+                        <button
+                          onClick={() => { setShowDuplicatesInTable(false); }}
+                          className="w-full py-2 text-xs font-semibold text-[var(--text-secondary)] bg-[var(--surface-2)] rounded-lg hover:bg-[var(--border-subtle)] transition-colors"
+                        >
+                          Show All Articles
+                        </button>
                       </div>
-                      <button 
-                        onClick={() => setShowDuplicateModal(true)}
-                        className="w-full py-2.5 text-sm bg-yellow-100 dark:bg-yellow-950/30 text-yellow-700 dark:text-yellow-300 rounded-lg hover:bg-yellow-200 dark:hover:bg-yellow-950/50 transition-colors font-semibold">
-                        View Duplicates
-                      </button>
-                    </>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
             </div>
-          </>
+          </div>
         )}
-      </div>
+      </aside>
 
-      {/* ── Center: table */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-[var(--surface-1)]">
-
-        {/* Table header */}
-        <div className="px-6 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
-          <span className="text-sm font-bold text-[var(--text-primary)]">
-            {loading ? "Loading..." : `${totalArticles} Articles`}
-            {selectedArticles.length > 0 && ` (${selectedArticles.length} selected)`}
+      {/* CENTER: TABLE */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-[var(--surface-1)] min-w-0">
+        {/* Toolbar */}
+        <div className="h-12 px-4 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0 gap-3">
+          <span className="text-sm font-semibold text-[var(--text-primary)] shrink-0">
+            {showDuplicatesInTable
+              ? `${duplicateCounts[statusFilter as keyof StatusCounts] || 0} ${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1).replace('_', ' ')} Duplicates`
+              : loading ? "Loading…"
+                : `Showing ${sortedArticles.length.toLocaleString()} / ${totalArticles.toLocaleString()} Articles`}
+            {selectedArticles.length > 0 && (
+              <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">({selectedArticles.length} selected)</span>
+            )}
           </span>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+              {showDuplicatesInTable && statusFilter === "unresolved" && duplicateCounts.unresolved > 0 && (
+                <button
+                  onClick={handleBulkResolve}
+                  className="px-3 py-1.5 text-xs font-semibold bg-[var(--accent)] text-white rounded-lg hover:opacity-90 transition-opacity font-medium"
+                >
+                  Resolve Duplicates
+                </button>
+              )}
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search articles..."
+                placeholder="Search articles…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-64 pl-9 pr-4 py-2 text-sm bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder-[var(--text-muted)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                className="w-48 pl-8 pr-3 py-1.5 text-sm bg-[var(--surface-2)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder-[var(--text-muted)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent"
               />
-              <svg className="w-4 h-4 text-[var(--text-muted)] absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" strokeWidth={2} /><path strokeLinecap="round" strokeWidth={2} d="M21 21l-4.35-4.35" /></svg>
+              <svg className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="8" strokeWidth={2} /><path strokeLinecap="round" strokeWidth={2} d="M21 21l-4.35-4.35" />
+              </svg>
             </div>
-            <select 
+            <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="text-sm bg-white dark:bg-[var(--surface-1)] border border-[var(--border-subtle)] text-[var(--text-secondary)] rounded-lg px-3 py-2 focus:outline-none transition-colors">
-              <option value="title">Sort by Title</option>
-              <option value="date">Sort by Date</option>
-              <option value="author">Sort by Author</option>
+              className="text-sm bg-white dark:bg-[var(--surface-1)] border border-[var(--border-subtle)] text-[var(--text-secondary)] rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+            >
+              <option value="title">Sort: Title</option>
+              <option value="date">Sort: Date</option>
+              <option value="author">Sort: Author</option>
             </select>
-            <button onClick={() => setShowFilters(!showFilters)}
-              className={`p-2 rounded-lg transition-colors ${showFilters ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "hover:bg-[var(--surface-2)] text-[var(--text-muted)]"}`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L14 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 018 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                showFilters
+                  ? "bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--accent-border)]"
+                  : "border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]"
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L14 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 018 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+              </svg>
+              Filters
             </button>
           </div>
         </div>
 
-        {/* Unresolved Duplicates Section (shown after detection) */}
-        {duplicates.length > 0 && (
-          <div className="px-6 py-4 bg-yellow-50 dark:bg-yellow-950/20 border-b border-yellow-200 dark:border-yellow-900/50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                <span className="text-sm font-bold text-yellow-900 dark:text-yellow-100">Unresolved Duplicates</span>
-              </div>
-              <button 
-                onClick={() => setDuplicates([])}
-                className="text-xs text-yellow-700 dark:text-yellow-300 hover:text-yellow-900 dark:hover:text-yellow-100 font-medium">
-                Dismiss
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Table */}
         <div className="flex-1 overflow-y-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
             <thead className="bg-[var(--surface-2)] border-b border-[var(--border-subtle)] sticky top-0 z-10">
               <tr>
-                <th className="w-12 px-5 py-3.5 text-left">
-                  <input 
-                    type="checkbox" 
-                    checked={selectedArticles.length === sortedArticles.length && sortedArticles.length > 0}
-                    onChange={toggleSelectAll}
-                    className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 accent-[var(--accent)]" 
-                  />
+                <th className="w-10 px-4 py-3 text-left">
+                  <input type="checkbox" checked={selectedArticles.length === sortedArticles.length && sortedArticles.length > 0} onChange={toggleSelectAll} className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 accent-[var(--accent)]" />
                 </th>
-                <th className="w-10 px-4 py-3.5 text-[var(--text-muted)] font-semibold text-left">#</th>
-                <th className="px-5 py-3.5 text-left font-bold text-[var(--text-secondary)] cursor-pointer hover:text-[var(--text-primary)] transition-colors">
-                  <div className="flex items-center gap-2">
-                    Title
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
+                <th className="w-10 px-3 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">#</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)]">
+                  <div className="flex items-center gap-1">Title <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg></div>
                 </th>
-                <th className="px-5 py-3.5 text-left font-bold text-[var(--text-secondary)]">
-                  <div className="flex items-center gap-2">
-                    Date
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
+                <th className="w-28 px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)]">
+                  <div className="flex items-center gap-1">Date <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg></div>
                 </th>
+                <th className="w-36 px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)]">Author</th>
+                {showDuplicatesInTable && (
+                  <th className="w-28 px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)]">Similarity</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-subtle)]">
               {loading ? (
+                Array.from({ length: 12 }).map((_, idx) => <SkeletonRow key={idx} />)
+              ) : showDuplicatesInTable ? (
                 <>
-                  {Array.from({ length: 10 }).map((_, idx) => (
-                    <SkeletonRow key={idx} />
-                  ))}
+                  <DuplicateTable
+                    ref={duplicateTableRef}
+                    reviewId={reviewId}
+                    statusFilter={statusFilter as 'unresolved' | 'deleted' | 'not_duplicate' | 'resolved'}
+                    onCountsUpdate={fetchDuplicateCounts}
+                    onSelectionChange={handleSelectionChange}
+                    clearSelection={clearDuplicateSelection}
+                    currentUser={api.getStoredUser()?.name || 'You'}
+                    activeDuplicateId={activeDuplicateId}
+                    onActiveDuplicateIdChange={(id) => setActiveDuplicateId(id)}
+                    onRowDoubleClick={async (articleId) => {
+                      try {
+                        const art = await api.getArticle(articleId);
+                        setSelectedArticleModal(art as any);
+                      } catch (e) {
+                        console.error("Failed to open article details:", e);
+                      }
+                    }}
+                  />
                 </>
-              ) : sortedArticles.map((article, idx) => (
-                <tr key={article.id} className="hover:bg-[var(--surface-2)] transition-colors cursor-pointer" onClick={() => setSelectedArticleModal(article)}>
-                  <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
-                    <input 
-                      type="checkbox" 
-                      checked={selectedArticles.includes(article.id)}
-                      onChange={() => toggleSelectArticle(article.id)}
-                      className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 accent-[var(--accent)]" 
-                    />
-                  </td>
-                  <td className="px-4 py-4 text-[var(--text-muted)] font-medium">{(currentPage - 1) * 100 + idx + 1}</td>
-                  <td className="px-5 py-4">
-                    <p 
-                      className="text-[var(--text-primary)] font-semibold leading-relaxed mb-1"
-                      dangerouslySetInnerHTML={{ __html: highlightText(article.title) }}
-                    />
-                    {article.screening_notes && (
-                      <p className="text-xs text-[var(--text-muted)] mt-1 italic">
-                        {article.screening_notes}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-5 py-4">
-                    <p className="text-[var(--text-secondary)] text-sm">
-                      {new Date(article.created_at).toLocaleDateString()}
-                    </p>
-                  </td>
-                </tr>
-              ))}
+              ) : (
+                sortedArticles.map((article, idx) => (
+                  <tr
+                    key={article.id}
+                    className="hover:bg-[var(--surface-2)] transition-colors cursor-pointer group border-b border-[var(--border-subtle)]"
+                    style={{
+                      background: activeArticleId === article.id ? "var(--accent-soft)" : undefined,
+                    }}
+                    onClick={() => setActiveArticleId(article.id)}
+                    onDoubleClick={() => setSelectedArticleModal(article)}
+                  >
+                    <td className="px-4 py-3 align-top" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedArticles.includes(article.id)}
+                        onChange={() => toggleSelectArticle(article.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 accent-[var(--accent)] opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                        style={{ opacity: selectedArticles.includes(article.id) ? 1 : undefined }}
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-xs text-[var(--text-muted)] align-top tabular-nums">{(currentPage - 1) * 100 + idx + 1}</td>
+                    <td className="px-4 py-3">
+                      {/* Title */}
+                      <p
+                        className="text-sm text-[var(--text-primary)] font-normal leading-snug mb-1"
+                        dangerouslySetInnerHTML={{ __html: highlightText(article.title) }}
+                      />
+                      {/* Labels */}
+                      {article._labels && article._labels.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-1.5 mb-1">
+                          {article._labels.map((label, li) => (
+                            <button
+                              key={li}
+                              onClick={(e) => { e.stopPropagation(); setArticleLabelPopup(article.id); }}
+                              className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold transition-all hover:opacity-80"
+                              style={{
+                                background: "var(--accent-soft)",
+                                border: "1px solid var(--accent-border)",
+                                color: "var(--accent-light)",
+                              }}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* Note */}
+                      {article._note && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setArticleNotePopup(article.id); }}
+                          className="mt-1 w-full text-left flex items-start gap-2 p-2 rounded-lg border transition-all hover:opacity-80"
+                          style={{
+                            background: "var(--accent-soft)",
+                            borderColor: "var(--accent-border)",
+                          }}
+                        >
+                          <svg className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: "var(--accent)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-semibold" style={{ color: "var(--accent-light)" }}>
+                              {article._noteAuthor || 'You'}
+                            </span>
+                            <p className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>
+                              {article._note}
+                            </p>
+                          </div>
+                        </button>
+                      )}
+                      {/* Legacy screening notes — now unified with _note via fetch mapping */}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-[var(--text-secondary)] align-top tabular-nums">{new Date(article.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+                    <td className="px-4 py-3 text-xs text-[var(--text-secondary)] align-top truncate" title={article.authors}>{article.authors || "—"}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            {selectedArticles.length > 0 ? (
-              <>
-                <select 
-                  value={bulkLabel}
-                  onChange={(e) => setBulkLabel(e.target.value)}
-                  className="text-sm bg-white dark:bg-[var(--surface-1)] border border-[var(--border-subtle)] text-[var(--text-secondary)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] transition-colors">
-                  <option value="">Select Label</option>
-                  <option value="include">Include</option>
-                  <option value="exclude">Exclude</option>
-                  <option value="maybe">Maybe</option>
-                </select>
-                <input 
-                  type="text"
-                  placeholder="Add notes..."
-                  value={bulkNotes}
-                  onChange={(e) => setBulkNotes(e.target.value)}
-                  className="text-sm bg-white dark:bg-[var(--surface-1)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder-[var(--text-muted)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] transition-colors"
-                />
-                <button 
-                  onClick={handleBulkUpdate}
-                  className="px-4 py-2 text-sm bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-light)] transition-colors font-medium shadow-[0_0_16px_var(--accent-glow)]">
-                  Update {selectedArticles.length}
-                </button>
-                <button 
-                  onClick={() => setSelectedArticles([])}
-                  className="px-4 py-2 text-sm border border-[var(--border-subtle)] text-[var(--text-secondary)] rounded-lg hover:bg-[var(--surface-2)] transition-colors font-medium">
-                  Cancel
-                </button>
-              </>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1 || loading}
-              className="px-3 py-2 text-sm border border-[var(--border-subtle)] rounded-lg hover:bg-[var(--surface-2)] transition-colors text-[var(--text-secondary)] disabled:opacity-50 disabled:cursor-not-allowed">
-              ‹
-            </button>
-            <span className="text-sm text-[var(--text-secondary)] font-medium">
-              Page {currentPage} of {totalPages} ({totalArticles} total)
-            </span>
-            <button 
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages || loading}
-              className="px-3 py-2 text-sm border border-[var(--border-subtle)] rounded-lg hover:bg-[var(--surface-2)] transition-colors text-[var(--text-secondary)] disabled:opacity-50 disabled:cursor-not-allowed">
-              ›
-            </button>
-          </div>
-        </div>
+        {/* ActionBar — replaces footer, includes pagination */}
+        {(() => {
+          const effectiveIds = showDuplicatesInTable
+            ? selectedDuplicateIds.length > 0
+              ? selectedDuplicateIds
+              : activeDuplicateId !== null
+                ? [activeDuplicateId]
+                : []
+            : selectedArticles.length > 0
+              ? selectedArticles
+              : activeArticleId !== null
+                ? [activeArticleId]
+                : [];
+
+          return (
+            <ActionBar
+              disabled={effectiveIds.length === 0}
+              onAttachPdf={() => setShowAddReferencesModal(true)}
+              onLabel={async (label) => {
+                if (!label.trim()) return;
+                // Add to global label list if it's a new custom label
+                setGlobalLabels(prev => prev.includes(label) ? prev : [...prev, label]);
+
+                if (showDuplicatesInTable) {
+                  const targets = selectedDuplicateIds.length > 0
+                    ? selectedDuplicateIds
+                    : activeDuplicateId !== null ? [activeDuplicateId] : [];
+                  if (targets.length === 0) return;
+                  duplicateTableRef.current?.applyLabelToSelected(targets, label);
+                  toast.success(`Label "${label}" applied to ${targets.length} item(s)!`, { duration: 3000, position: 'bottom-right' });
+                  if (selectedDuplicateIds.length > 0) {
+                    setSelectedDuplicateIds([]);
+                    setClearDuplicateSelection(true);
+                    setTimeout(() => setClearDuplicateSelection(false), 100);
+                  }
+                } else {
+                  const targets = selectedArticles.length > 0
+                    ? selectedArticles
+                    : activeArticleId !== null ? [activeArticleId] : [];
+                  if (targets.length === 0) return;
+
+                  // Optimistic UI update
+                  setArticles(prev =>
+                    prev.map(a =>
+                      targets.includes(a.id)
+                        ? { ...a, _labels: [...new Set([...(a._labels || []), label])], labels: [...new Set([...(a.labels || []), label])] }
+                        : a
+                    )
+                  );
+
+                  // Persist to DB
+                  try {
+                    if (targets.length === 1) {
+                      const art = articles.find(a => a.id === targets[0]);
+                      const updatedLabels = [...new Set([...(art?.labels || []), label])];
+                      await api.updateArticle(targets[0], { labels: updatedLabels });
+                    } else {
+                      // For bulk, merge label into each article's existing labels via bulk endpoint
+                      await api.bulkUpdateArticles(reviewId, {
+                        article_ids: targets,
+                        labels: [label],
+                      } as any);
+                    }
+                    toast.success(`Label "${label}" applied to ${targets.length} article(s)!`, { duration: 3000, position: 'bottom-right' });
+                  } catch (err) {
+                    console.error('Failed to save label:', err);
+                    toast.error('Failed to save label', { duration: 3000, position: 'bottom-right' });
+                  }
+
+                  if (selectedArticles.length > 0) setSelectedArticles([]);
+                }
+              }}
+              onAddNote={async (note) => {
+                const user = api.getStoredUser();
+                const userName = user?.name || 'You';
+                if (showDuplicatesInTable) {
+                  const targets = selectedDuplicateIds.length > 0 ? selectedDuplicateIds : (activeDuplicateId !== null ? [activeDuplicateId] : []);
+                  if (targets.length === 0) return;
+                  duplicateTableRef.current?.applyNoteToSelected(targets, note, userName);
+                } else {
+                  const targets = selectedArticles.length > 0 ? selectedArticles : (activeArticleId !== null ? [activeArticleId] : []);
+                  if (targets.length === 0) return;
+
+                  // Optimistic UI update
+                  setArticles((prev) =>
+                    prev.map((a) => (targets.includes(a.id) ? { ...a, _note: note, _noteAuthor: userName, screening_notes: note } : a))
+                  );
+
+                  // Persist to DB
+                  try {
+                    if (targets.length === 1) {
+                      await api.updateArticle(targets[0], { screening_notes: note });
+                    } else {
+                      await api.bulkUpdateArticles(reviewId, {
+                        article_ids: targets,
+                        screening_notes: note,
+                      });
+                    }
+                  } catch (err) {
+                    console.error('Failed to save note:', err);
+                    toast.error('Failed to save note', { duration: 3000, position: 'bottom-right' });
+                  }
+                }
+              }}
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPrevPage={() => setCurrentPage(p => Math.max(1, p - 1))}
+              onNextPage={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              loadingPages={loading}
+              selectionCount={effectiveIds.length}
+            />
+          );
+        })()}
       </div>
 
-      {/* ── Right: filters */}
+      {/* RIGHT: FILTERS */}
       {showFilters && (
-        <div className="w-80 shrink-0 bg-white dark:bg-[var(--surface-1)] border-l border-[var(--border-subtle)] flex flex-col overflow-hidden shadow-sm">
-          <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
-            <span className="text-sm font-bold text-[var(--text-primary)] uppercase tracking-wider">Filters</span>
-            <button onClick={() => setShowFilters(false)} className="p-1.5 hover:bg-[var(--surface-2)] rounded-lg transition-colors">
-              <svg className="w-5 h-5 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+        <aside className="w-64 shrink-0 bg-white dark:bg-[var(--surface-1)] border-l border-[var(--border-subtle)] flex flex-col overflow-hidden">
+          <div className="h-12 px-4 flex items-center justify-between border-b border-[var(--border-subtle)] shrink-0">
+            <span className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-widest">Filters</span>
+            <button onClick={() => setShowFilters(false)} className="p-1 hover:bg-[var(--surface-2)] rounded-md transition-colors">
+              <svg className="w-4 h-4 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-5 space-y-6">
+          {/* Single scroll area */}
+          <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
 
-              {/* Include keywords */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-6 h-6 bg-green-500 rounded-lg flex items-center justify-center">
-                      <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                    </div>
-                    <span className="text-sm font-bold text-[var(--text-primary)]">Keywords for include</span>
+            {/* Include */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 bg-green-500 rounded-md flex items-center justify-center shrink-0">
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                   </div>
-                  <button className="p-1.5 bg-green-500 hover:bg-green-600 rounded-lg transition-colors">
-                    <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                  </button>
+                  <span className="text-xs font-semibold text-[var(--text-primary)]">Keywords for include</span>
                 </div>
-                
-                {/* Custom keyword input */}
-                <div className="mb-4">
+                <button
+                  onClick={() => setShowIncludeInput(!showIncludeInput)}
+                  className="w-5 h-5 bg-green-500 hover:bg-green-600 rounded-md flex items-center justify-center transition-colors shrink-0"
+                >
+                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={showIncludeInput ? "M20 12H4" : "M12 4v16m8-8H4"} />
+                  </svg>
+                </button>
+              </div>
+
+              {showIncludeInput && (
+                <div className="mb-2 flex gap-1.5">
                   <input
                     type="text"
-                    placeholder="Use comma, to separate words"
+                    placeholder="comma, separated…"
                     value={customIncludeKeyword}
                     onChange={(e) => setCustomIncludeKeyword(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && addCustomIncludeKeyword()}
-                    className="w-full text-sm bg-white dark:bg-[var(--surface-1)] border-2 border-[var(--accent)] text-[var(--text-primary)] placeholder-[var(--text-muted)] rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                    onKeyDown={(e) => { if (e.key === 'Enter') { addCustomIncludeKeyword(); setShowIncludeInput(false); } }}
+                    autoFocus
+                    className="flex-1 text-xs bg-white dark:bg-[var(--surface-1)] border-2 border-green-400 text-[var(--text-primary)] placeholder-[var(--text-muted)] rounded-lg px-2 py-1.5 focus:outline-none"
                   />
+                  <button onClick={() => { addCustomIncludeKeyword(); setShowIncludeInput(false); }} className="px-2 py-1.5 bg-green-500 text-white rounded-lg text-xs font-semibold hover:bg-green-600 transition-colors shrink-0">Add</button>
                 </div>
+              )}
 
-                {/* Select All checkbox */}
-                <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-[var(--surface-2)] cursor-pointer transition-colors mb-2">
-                  <input 
-                    type="checkbox" 
-                    className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 accent-green-500" 
-                  />
-                  <span className="text-sm text-[var(--text-secondary)] font-medium">Select All</span>
-                </label>
-
-                {/* Selected custom keywords */}
-                {includeKeywords.length > 0 && (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {includeKeywords.map(keyword => (
-                      <span key={keyword} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400 rounded-lg text-xs font-medium">
-                        {keyword}
-                        <button onClick={() => removeIncludeKeyword(keyword)} className="hover:text-green-900 dark:hover:text-green-200">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="space-y-1 max-h-64 overflow-y-auto">
-                  {keywords.slice(0, 10).map(({ word, count }) => (
-                    <label key={word} className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-[var(--surface-2)] cursor-pointer transition-colors">
-                      <div className="flex items-center gap-2.5">
-                        <input 
-                          type="checkbox" 
-                          checked={includeKeywords.includes(word)}
-                          onChange={() => toggleIncludeKeyword(word)}
-                          className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 accent-green-500" 
-                        />
-                        <span className="text-sm text-[var(--text-secondary)]">{word}</span>
-                      </div>
-                      <span className="text-sm text-[var(--text-muted)] font-bold">{count}</span>
-                    </label>
+              {includeKeywords.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {includeKeywords.map(kw => (
+                    <span key={kw} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-950/60 text-green-700 dark:text-green-400 rounded-md text-xs font-medium">
+                      {kw}
+                      <button onClick={() => removeIncludeKeyword(kw)}><svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+                    </span>
                   ))}
                 </div>
-              </div>
+              )}
 
-              {/* Exclude keywords */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-6 h-6 bg-red-500 rounded-lg flex items-center justify-center">
-                      <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+              <div className="space-y-0.5">
+                {keywords.slice(0, 10).map(({ word, count }) => (
+                  <label key={word} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-[var(--surface-2)] cursor-pointer transition-colors">
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" checked={includeKeywords.includes(word)} onChange={() => toggleIncludeKeyword(word)} className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 accent-green-500" />
+                      <span className="text-xs text-[var(--text-secondary)]">{word}</span>
                     </div>
-                    <span className="text-sm font-bold text-[var(--text-primary)]">Keywords for exclude</span>
+                    <span className="text-xs text-[var(--text-muted)] font-semibold tabular-nums">{count}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-[var(--border-subtle)]" />
+
+            {/* Exclude */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 bg-red-500 rounded-md flex items-center justify-center shrink-0">
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
                   </div>
-                  <button className="p-1.5 bg-red-500 hover:bg-red-600 rounded-lg transition-colors">
-                    <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                  </button>
+                  <span className="text-xs font-semibold text-[var(--text-primary)]">Keywords for exclude</span>
                 </div>
-
-                {/* Select All checkbox */}
-                <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-[var(--surface-2)] cursor-pointer transition-colors mb-2">
-                  <input 
-                    type="checkbox" 
-                    className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 accent-red-500" 
-                  />
-                  <span className="text-sm text-[var(--text-secondary)] font-medium">Select All</span>
-                </label>
-
-                {/* Selected custom keywords */}
-                {excludeKeywords.length > 0 && (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {excludeKeywords.map(keyword => (
-                      <span key={keyword} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-400 rounded-lg text-xs font-medium">
-                        {keyword}
-                        <button onClick={() => removeExcludeKeyword(keyword)} className="hover:text-red-900 dark:hover:text-red-200">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="space-y-1 max-h-64 overflow-y-auto">
-                  {keywords.slice(0, 10).map(({ word, count }) => (
-                    <label key={word} className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-[var(--surface-2)] cursor-pointer transition-colors">
-                      <div className="flex items-center gap-2.5">
-                        <input 
-                          type="checkbox" 
-                          checked={excludeKeywords.includes(word)}
-                          onChange={() => toggleExcludeKeyword(word)}
-                          className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 accent-red-500" 
-                        />
-                        <span className="text-sm text-[var(--text-secondary)]">{word}</span>
-                      </div>
-                      <span className="text-sm text-[var(--text-muted)] font-bold">{count}</span>
-                    </label>
-                  ))}
-                </div>
+                <button
+                  onClick={() => setShowExcludeInput(!showExcludeInput)}
+                  className="w-5 h-5 bg-red-500 hover:bg-red-600 rounded-md flex items-center justify-center transition-colors shrink-0"
+                >
+                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={showExcludeInput ? "M20 12H4" : "M12 4v16m8-8H4"} />
+                  </svg>
+                </button>
               </div>
 
+              {showExcludeInput && (
+                <div className="mb-2 flex gap-1.5">
+                  <input
+                    type="text"
+                    placeholder="comma, separated…"
+                    value={customExcludeKeyword}
+                    onChange={(e) => setCustomExcludeKeyword(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { addCustomExcludeKeyword(); setShowExcludeInput(false); } }}
+                    autoFocus
+                    className="flex-1 text-xs bg-white dark:bg-[var(--surface-1)] border-2 border-red-400 text-[var(--text-primary)] placeholder-[var(--text-muted)] rounded-lg px-2 py-1.5 focus:outline-none"
+                  />
+                  <button onClick={() => { addCustomExcludeKeyword(); setShowExcludeInput(false); }} className="px-2 py-1.5 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors shrink-0">Add</button>
+                </div>
+              )}
+
+              {excludeKeywords.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {excludeKeywords.map(kw => (
+                    <span key={kw} className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400 rounded-md text-xs font-medium">
+                      {kw}
+                      <button onClick={() => removeExcludeKeyword(kw)}><svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-0.5">
+                {keywords.slice(0, 10).map(({ word, count }) => (
+                  <label key={word} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-[var(--surface-2)] cursor-pointer transition-colors">
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" checked={excludeKeywords.includes(word)} onChange={() => toggleExcludeKeyword(word)} className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 accent-red-500" />
+                      <span className="text-xs text-[var(--text-secondary)]">{word}</span>
+                    </div>
+                    <span className="text-xs text-[var(--text-muted)] font-semibold tabular-nums">{count}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        </aside>
+      )}
+
+      {/* DETECT DUPLICATES CONFIRMATION MODAL */}
+      {showDuplicateModal && !detectingDuplicates && duplicateCounts.total === 0 && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-[var(--surface-1)] rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 border border-[var(--border-subtle)]">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 bg-[var(--accent-soft)] rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h2 className="text-base font-bold text-[var(--text-primary)]">Detect Duplicates</h2>
+            </div>
+            <p className="text-sm text-[var(--text-secondary)] mb-5 leading-relaxed">The system will scan all articles and identify potential duplicates, helping you resolve them efficiently.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowDuplicateModal(false)} className="px-4 py-2 text-sm border border-[var(--border-subtle)] text-[var(--text-secondary)] rounded-lg hover:bg-[var(--surface-2)] transition-colors font-medium">Cancel</button>
+              <button onClick={handleDetectDuplicates} disabled={detectingDuplicates} className="px-4 py-2 text-sm bg-[var(--accent)] text-white rounded-lg hover:opacity-90 transition-opacity font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                {detectingDuplicates ? "Detecting…" : "Proceed"}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Duplicate Detection Modal */}
-      {showDuplicateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-[var(--surface-1)] rounded-lg shadow-lg p-8 max-w-md w-full mx-4 border border-[var(--border-subtle)]">
-            <h2 className="text-xl font-bold text-[var(--text-primary)] mb-3">Detect Duplicates</h2>
-            <p className="text-[var(--text-secondary)] mb-6">By start detecting duplicates, the system will find all duplicated articles and organize it to help you resolve them!</p>
-            <div className="flex gap-3 justify-end">
+      {/* DETECTING DUPLICATES PROGRESS MODAL */}
+      {detectingDuplicates && (
+        <div className="fixed bottom-4 left-4 z-50 animate-in slide-in-from-bottom-2 duration-300">
+          <div className="bg-white dark:bg-[var(--surface-1)] rounded-xl shadow-2xl border border-[var(--border-subtle)] p-4 min-w-[400px]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 flex-1">
+                <div className="w-10 h-10 bg-[var(--accent-soft)] rounded-lg flex items-center justify-center shrink-0">
+                  <svg className="w-5 h-5 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-sm font-bold text-[var(--text-primary)]">Detect Duplicates</h3>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 rounded-full text-xs font-semibold">
+                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      In Progress
+                    </span>
+                  </div>
+                  <p className="text-sm text-[var(--text-secondary)]">The action is currently in progress. Please wait.</p>
+                </div>
+              </div>
               <button 
-                onClick={() => setShowDuplicateModal(false)}
-                className="px-4 py-2 text-sm border border-[var(--border-subtle)] text-[var(--text-secondary)] rounded-lg hover:bg-[var(--surface-2)] transition-colors font-medium">
+                onClick={() => setDetectingDuplicates(false)}
+                className="p-1 hover:bg-[var(--surface-2)] rounded-md transition-colors shrink-0"
+                title="Close (detection will continue)"
+              >
+                <svg className="w-4 h-4 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RE-RUN DETECTION CONFIRMATION MODAL */}
+      {showRerunModal && !detectingDuplicates && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-[var(--surface-1)] rounded-xl shadow-xl p-6 max-w-md w-full mx-4 border border-[var(--border-subtle)]">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 bg-[var(--accent-soft)] rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+              <h2 className="text-base font-bold text-[var(--text-primary)]">Re-run Duplicate Detection</h2>
+            </div>
+            <p className="text-sm text-[var(--text-secondary)] mb-4 leading-relaxed">
+              Choose how you want to re-run the duplicate detection:
+            </p>
+            <div className="bg-[var(--surface-2)] rounded-lg p-4 mb-5">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={incrementalOnly}
+                  onChange={(e) => setIncrementalOnly(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 dark:border-gray-600 accent-[var(--accent)]"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">Only check new articles</p>
+                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                    Only scan articles added since the last detection run. Existing duplicate pairs will be preserved.
+                  </p>
+                </div>
+              </label>
+            </div>
+            {!incrementalOnly && (
+              <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/50 rounded-lg p-3 mb-5">
+                <div className="flex items-start gap-2">
+                  <svg className="w-4 h-4 text-orange-600 dark:text-orange-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <p className="text-xs text-orange-800 dark:text-orange-300 leading-relaxed">
+                    <strong>Warning:</strong> Full re-run will clear all existing duplicate pairs and their statuses before scanning all articles again.
+                  </p>
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button 
+                onClick={() => {
+                  setShowRerunModal(false);
+                  setIncrementalOnly(false);
+                }} 
+                className="px-4 py-2 text-sm border border-[var(--border-subtle)] text-[var(--text-secondary)] rounded-lg hover:bg-[var(--surface-2)] transition-colors font-medium"
+              >
                 Cancel
               </button>
               <button 
-                onClick={handleDetectDuplicates}
-                disabled={detectingDuplicates}
-                className="px-4 py-2 text-sm bg-[var(--accent)] text-white rounded-lg hover:bg-[var(--accent-light)] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_16px_var(--accent-glow)]">
-                {detectingDuplicates ? "Detecting..." : "Proceed"}
+                onClick={handleRerunDetection} 
+                disabled={detectingDuplicates} 
+                className="px-4 py-2 text-sm bg-[var(--accent)] text-white rounded-lg hover:opacity-90 transition-opacity font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {detectingDuplicates ? "Detecting…" : incrementalOnly ? "Check New Articles" : "Re-run Full Scan"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Duplicate Detection Progress */}
-      {detectingDuplicates && (
-        <div className="fixed bottom-6 right-6 bg-white dark:bg-[var(--surface-1)] rounded-lg shadow-lg p-4 flex items-center gap-3 z-50 border border-[var(--border-subtle)]">
-          <div className="animate-spin">
-            <svg className="w-5 h-5 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" strokeWidth={2} opacity="0.25" /><path strokeLinecap="round" strokeWidth={2} d="M4 12a8 8 0 018-8" /></svg>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-[var(--text-primary)]">Detect Duplicates</p>
-            <p className="text-xs text-[var(--text-secondary)]">The action is currently in progress. Please wait.</p>
-          </div>
-        </div>
-      )}
-
-      {/* ── Duplicates Found Modal (only shown when user clicks "View Duplicates") */}
-      {duplicates.length > 0 && showDuplicateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-[var(--surface-1)] rounded-lg shadow-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto border border-[var(--border-subtle)]">
-            <div className="sticky top-0 bg-white dark:bg-[var(--surface-1)] border-b border-[var(--border-subtle)] px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-[var(--text-primary)]">Possible Duplicates Found</h2>
-              <button 
-                onClick={() => setShowDuplicateModal(false)}
-                className="p-1.5 hover:bg-[var(--surface-2)] rounded-lg transition-colors">
-                <svg className="w-5 h-5 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              {duplicates.map((dup, idx) => (
-                <div key={idx} className="border border-yellow-200 dark:border-yellow-900/50 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-[var(--text-primary)] mb-2">
-                        <span className="text-yellow-600 dark:text-yellow-400">⚠ {dup.similarity}% match</span> - {dup.reason}
-                      </p>
-                      <div className="space-y-2">
-                        <p className="text-sm text-[var(--text-secondary)]"><strong>Article 1:</strong> {dup.article1_title}</p>
-                        <p className="text-sm text-[var(--text-secondary)]"><strong>Article 2:</strong> {dup.article2_title}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => handleDeleteDuplicate(dup.article1_id)}
-                      className="flex-1 px-3 py-2 text-sm bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors font-medium">
-                      Delete Article 1
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteDuplicate(dup.article2_id)}
-                      className="flex-1 px-3 py-2 text-sm bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors font-medium">
-                      Delete Article 2
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Article Detail Modal */}
+      {/* ARTICLE DETAIL DRAWER */}
       {selectedArticleModal && (
         <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setSelectedArticleModal(null)} />
-          <div className="absolute right-0 top-0 bottom-0 w-96 bg-white dark:bg-[var(--surface-1)] shadow-lg animate-in slide-in-from-right-96 duration-300 overflow-y-auto border-l border-[var(--border-subtle)]">
-            <div className="sticky top-0 bg-white dark:bg-[var(--surface-1)] border-b border-[var(--border-subtle)] px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-[var(--text-primary)]">Article Details</h2>
-              <button 
-                onClick={() => setSelectedArticleModal(null)}
-                className="p-1.5 hover:bg-[var(--surface-2)] rounded-lg transition-colors">
-                <svg className="w-5 h-5 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          <div className="absolute inset-0 bg-black/30" onClick={() => setSelectedArticleModal(null)} />
+          <div className="absolute right-0 top-0 bottom-0 w-80 bg-white dark:bg-[var(--surface-1)] shadow-xl overflow-y-auto border-l border-[var(--border-subtle)]">
+            <div className="sticky top-0 bg-white dark:bg-[var(--surface-1)] border-b border-[var(--border-subtle)] px-5 py-3.5 flex items-center justify-between z-10">
+              <h2 className="text-sm font-bold text-[var(--text-primary)]">Article Details</h2>
+              <button onClick={() => setSelectedArticleModal(null)} className="p-1.5 hover:bg-[var(--surface-2)] rounded-lg transition-colors">
+                <svg className="w-4 h-4 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="p-6 space-y-6">
+            <div className="p-5 space-y-5">
               <div>
-                <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Title</p>
-                <p className="text-sm font-semibold text-[var(--text-primary)]">{selectedArticleModal.title}</p>
+                <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Title</p>
+                <p className="text-sm font-semibold text-[var(--text-primary)] leading-snug">{selectedArticleModal.title}</p>
               </div>
               {selectedArticleModal.authors && (
                 <div>
-                  <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Authors</p>
+                  <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Authors</p>
                   <p className="text-sm text-[var(--text-secondary)]">{selectedArticleModal.authors}</p>
                 </div>
               )}
               {selectedArticleModal.abstract && (
                 <div>
-                  <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Abstract</p>
+                  <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Abstract</p>
                   <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{selectedArticleModal.abstract}</p>
                 </div>
               )}
               {selectedArticleModal.url && (
                 <div>
-                  <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">URL</p>
-                  <a href={selectedArticleModal.url} target="_blank" rel="noopener noreferrer" className="text-sm text-[var(--accent)] hover:text-[var(--accent-light)] hover:underline break-all transition-colors">
-                    {selectedArticleModal.url}
-                  </a>
+                  <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">URL</p>
+                  <a href={selectedArticleModal.url} target="_blank" rel="noopener noreferrer" className="text-sm text-[var(--accent)] hover:underline break-all">{selectedArticleModal.url}</a>
                 </div>
               )}
               <div>
-                <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Decision</p>
+                <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Decision</p>
                 <div className="flex items-center gap-2">
                   {decisionDot(selectedArticleModal.screening_decision || null)}
-                  <span className="text-sm text-[var(--text-secondary)] capitalize">
-                    {selectedArticleModal.screening_decision || "Undecided"}
-                  </span>
+                  <span className="text-sm text-[var(--text-secondary)] capitalize">{selectedArticleModal.screening_decision || "Undecided"}</span>
                 </div>
               </div>
               {selectedArticleModal.screening_notes && (
                 <div>
-                  <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2">Notes</p>
+                  <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Notes</p>
                   <p className="text-sm text-[var(--text-secondary)]">{selectedArticleModal.screening_notes}</p>
                 </div>
               )}
@@ -1053,58 +1492,250 @@ export default function ReviewDataPage() {
         </div>
       )}
 
-      {/* ── Add References Modal */}
+      {/* ADD REFERENCES MODAL */}
       {showAddReferencesModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-black rounded-lg w-full max-w-2xl shadow-xl">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-800">
+          <div className="bg-white dark:bg-[var(--surface-1)] rounded-xl w-full max-w-xl shadow-xl border border-[var(--border-subtle)]">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border-subtle)]">
               <div className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                <span className="text-sm font-semibold text-gray-800 dark:text-white">Add References</span>
+                <svg className="w-4 h-4 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                <span className="text-sm font-semibold text-[var(--text-primary)]">Add References</span>
               </div>
-              <button onClick={() => { setShowAddReferencesModal(false); setSelectedFiles([]); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              <button onClick={() => { setShowAddReferencesModal(false); setSelectedFiles([]); }} className="p-1 hover:bg-[var(--surface-2)] rounded-lg transition-colors">
+                <svg className="w-4 h-4 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-
-            {/* Modal Content */}
             <div className="p-5 flex gap-4">
-              <div className="w-44 shrink-0">
-                <p className="text-xs font-semibold text-gray-700 mb-2">Supported Formats</p>
-                <p className="text-xs text-gray-500 mb-2">Visit <span className="text-orange-500 cursor-pointer">Help Center</span> to learn more</p>
-                <ul className="text-xs text-gray-600 space-y-1">
+              <div className="w-40 shrink-0">
+                <p className="text-xs font-semibold text-[var(--text-primary)] mb-1.5">Supported Formats</p>
+                <p className="text-xs text-[var(--text-muted)] mb-2">Visit <span className="text-[var(--accent)] cursor-pointer">Help Center</span> to learn more</p>
+                <ul className="text-xs text-[var(--text-secondary)] space-y-1">
                   {["EndNote Export", "Refman/RIS", "CSV", "BibTeX", "PubMed XML", "New PubMed Format/.nbib", "Web of Science/CIW"].map(f => (
-                    <li key={f} className="flex items-center gap-1"><span className="w-1 h-1 bg-gray-400 rounded-full shrink-0" />{f}</li>
+                    <li key={f} className="flex items-center gap-1.5"><span className="w-1 h-1 bg-[var(--text-muted)] rounded-full shrink-0" />{f}</li>
                   ))}
                 </ul>
               </div>
-              <div className="flex-1 border border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center text-center">
-                <p className="text-xs font-semibold text-gray-700 mb-1">Select Files</p>
-                <p className="text-xs text-gray-400 mb-3">Select up to 10 files...</p>
-                <svg className="w-10 h-10 text-gray-500 dark:text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                <p className="text-xs text-gray-600 mb-1">Select files to import</p>
-                <p className="text-xs text-gray-400 mb-3">Import and manage your data set!</p>
-                <button onClick={() => fileInputRef.current?.click()} className="bg-black dark:bg-white text-white dark:text-black text-xs px-4 py-1.5 rounded font-medium hover:bg-gray-800 dark:hover:bg-gray-200">Select Files</button>
+              <div className="flex-1 border-2 border-dashed border-[var(--border-subtle)] rounded-xl p-5 flex flex-col items-center justify-center text-center hover:border-[var(--accent)] transition-colors cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                <svg className="w-8 h-8 text-[var(--text-muted)] mb-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">Select Files</p>
+                <p className="text-xs text-[var(--text-muted)] mb-3">Up to 10 files at once</p>
+                <button onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }} className="bg-[var(--accent)] text-white text-xs px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">Browse Files</button>
                 <input ref={fileInputRef} type="file" multiple accept=".csv,.ris,.bib,.xml,.nbib" onChange={e => { if (e.target.files) setSelectedFiles(Array.from(e.target.files).slice(0, 10)); }} className="hidden" />
-                {selectedFiles.length > 0 && <p className="text-xs text-gray-500 mt-2">{selectedFiles.length} file(s) selected</p>}
+                {selectedFiles.length > 0 && <p className="text-xs text-[var(--accent)] mt-2 font-medium">{selectedFiles.length} file(s) selected</p>}
               </div>
             </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-[var(--border-subtle)]">
+              <button onClick={() => { setShowAddReferencesModal(false); setSelectedFiles([]); }} className="text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-2)] px-3 py-1.5 rounded-lg transition-colors">Cancel</button>
+              <button onClick={uploadArticles} disabled={uploading || selectedFiles.length === 0} className="bg-[var(--accent)] text-white text-sm px-4 py-1.5 rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
+                {uploading ? "Uploading…" : "Upload & Continue"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200 dark:border-gray-800">
-              <button onClick={() => { setShowAddReferencesModal(false); setSelectedFiles([]); }} className="text-xs text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 px-3 py-1.5 rounded">Cancel</button>
+      {/* MANUAL DUPLICATE RESOLUTION MODAL */}
+      {showManualDuplicateResolve && (
+        <ManualDuplicateResolveModal
+          pair={duplicateResolveQueue[duplicateResolveIndex] || null}
+          index={duplicateResolveIndex}
+          total={duplicateResolveQueue.length}
+          isResolving={manualDuplicateResolvingId !== null}
+          onClose={() => {
+            setShowManualDuplicateResolve(false);
+            setDuplicateResolveQueue([]);
+            setDuplicateResolveIndex(0);
+            setManualDuplicateResolvingId(null);
+          }}
+          onChoose={(choice) => handleManualDuplicateChoice(choice)}
+        />
+      )}
+
+      {/* ARTICLE NOTE POPUP */}
+      {articleNotePopup !== null && (() => {
+        const art = articles.find(a => a.id === articleNotePopup);
+        if (!art?._note) return null;
+        return (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" }}
+            onClick={() => setArticleNotePopup(null)}
+          >
+            <div
+              className="rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden"
+              style={{
+                background: "var(--surface-1)",
+                border: "1px solid var(--border-subtle)",
+                boxShadow: "0 24px 64px rgba(0,0,0,0.4), 0 0 0 1px var(--accent-border)",
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: "var(--border-subtle)" }}>
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4" style={{ color: "var(--accent)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                  </svg>
+                  <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Notes</h3>
+                </div>
+                <button onClick={() => setArticleNotePopup(null)} className="p-1 rounded-lg transition-all hover:opacity-70" style={{ color: "var(--text-muted)" }}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="px-5 py-4">
+                <div className="flex items-start gap-3">
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: "linear-gradient(135deg, var(--accent) 0%, var(--secondary) 100%)", boxShadow: "0 0 12px var(--accent-glow)" }}
+                  >
+                    <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold mb-1" style={{ color: "var(--accent-light)" }}>{art._noteAuthor || 'You'}</p>
+                    <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>{art._note}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ARTICLE LABEL POPUP */}
+      {articleLabelPopup !== null && (() => {
+        const art = articles.find(a => a.id === articleLabelPopup);
+        if (!art?._labels?.length) return null;
+        return (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center"
+            style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" }}
+            onClick={() => setArticleLabelPopup(null)}
+          >
+            <div
+              className="rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden"
+              style={{
+                background: "var(--surface-1)",
+                border: "1px solid var(--border-subtle)",
+                boxShadow: "0 24px 64px rgba(0,0,0,0.4), 0 0 0 1px var(--accent-border)",
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: "var(--border-subtle)" }}>
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4" style={{ color: "var(--accent)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                  </svg>
+                  <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Labels</h3>
+                </div>
+                <button onClick={() => setArticleLabelPopup(null)} className="p-1 rounded-lg transition-all hover:opacity-70" style={{ color: "var(--text-muted)" }}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="px-5 py-4 space-y-2">
+                {art._labels!.map((label, i) => (
+                  <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                      style={{ background: "linear-gradient(135deg, var(--accent) 0%, var(--secondary) 100%)" }}
+                    >
+                      <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold" style={{ color: "var(--accent-light)" }}>You</p>
+                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>Label: {label}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      {showLabelDialog && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => { setShowLabelDialog(false); setLabelInput(""); }}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Labels</h3>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Add hotkeys to get a faster experience!
+                </p>
+              </div>
               <button
-                onClick={uploadArticles}
-                disabled={uploading || selectedFiles.length === 0}
-                className="bg-black dark:bg-white text-white dark:text-black text-xs px-4 py-1.5 rounded font-medium hover:bg-gray-800 dark:hover:bg-gray-200 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                onClick={() => { setShowLabelDialog(false); setLabelInput(""); }}
+                className="p-1.5 rounded-lg transition-all hover:opacity-70"
+                style={{ color: "var(--text-muted)" }}
               >
-                {uploading ? "Uploading..." : "Upload & Continue"}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Dynamic labels */}
+            <div className="px-6 py-4 space-y-2 max-h-60 overflow-y-auto">
+              {globalLabels.map((label) => (
+                <label
+                  key={label}
+                  className="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all hover:opacity-80"
+                  style={{
+                    border: "1px solid var(--border-subtle)",
+                    background: labelInput === label ? "var(--accent-soft)" : "var(--surface-2)",
+                    borderColor: labelInput === label ? "var(--accent-border)" : "var(--border-subtle)",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={labelInput === label}
+                    onChange={(e) => setLabelInput(e.target.checked ? label : "")}
+                    className="w-4 h-4 rounded"
+                    style={{ accentColor: "var(--accent)" }}
+                  />
+                  <span className="flex-1 text-sm font-medium" style={{ color: "var(--text-primary)" }}>{label}</span>
+                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>Click to add hotkey</span>
+                </label>
+              ))}
+            </div>
+
+            {/* Custom label input */}
+            <div className="px-6 pb-4">
+              <input
+                type="text"
+                value={labelInput}
+                onChange={(e) => setLabelInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && labelInput.trim()) handleBulkLabel(); }}
+                placeholder="Add labels"
+                autoFocus
+                className="w-full px-4 py-3 text-sm rounded-xl border focus:outline-none transition-all"
+                style={{
+                  background: "var(--surface-2)",
+                  borderColor: "var(--border-subtle)",
+                  color: "var(--text-primary)",
+                }}
+              />
+            </div>
+
+            {/* Apply button */}
+            <div className="px-6 py-4 border-t" style={{ background: "var(--surface-2)", borderColor: "var(--border-subtle)" }}>
+              <button
+                onClick={handleBulkLabel}
+                disabled={!labelInput.trim()}
+                className="w-full py-2.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{
+                  background: "linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%)",
+                  boxShadow: labelInput.trim() ? "0 0 16px var(--accent-glow)" : "none",
+                }}
+              >
+                Apply
               </button>
             </div>
           </div>
         </div>
       )}
     </div>
+    </>
   );
 }

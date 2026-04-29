@@ -6,57 +6,20 @@ export interface BrandingConfig {
 }
 
 const DEFAULT_BRANDING: BrandingConfig = {
-  websiteName: 'StataNexus.Ai',
+  websiteName: 'Research Nexus',
   logoUrl: null,
   logoType: 'text',
 };
 
 const STORAGE_KEY = 'branding_config';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-let lastFetchTime = 0;
 
+// SIMPLIFIED: No API calls, just return cached or default branding
 export async function getBrandingConfig(): Promise<BrandingConfig> {
   if (typeof window === 'undefined') {
     return DEFAULT_BRANDING;
   }
 
-  // Check if we have cached data and it's still fresh
-  const now = Date.now();
-  if (now - lastFetchTime < CACHE_DURATION) {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (error) {
-      console.error('Failed to parse branding config:', error);
-    }
-  }
-
-  // Fetch from backend API
-  try {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
-    const response = await fetch(`${API_BASE_URL}/settings`);
-    if (response.ok) {
-      const data = await response.json();
-      const config: BrandingConfig = {
-        websiteName: data.website_name || DEFAULT_BRANDING.websiteName,
-        logoUrl: data.logo_url || null,
-        logoType: data.logo_url ? 'image' : 'text',
-      };
-      
-      // Cache the result
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-      lastFetchTime = now;
-      
-      return config;
-    }
-  } catch (error) {
-    // Silently handle - settings endpoint might not exist yet
-    // This is expected during development
-  }
-
-  // Fallback to localStorage or defaults
+  // Try to get from localStorage
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {

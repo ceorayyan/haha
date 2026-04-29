@@ -1,9 +1,16 @@
 // API Configuration and Helper Functions
 // Multiple backend URLs with fallback support
+import type {
+  DetectionResponse,
+  PaginatedDuplicates,
+  StatusCounts,
+  Duplicate,
+} from '../types/duplicate';
+
 const API_URLS = [
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api',
-  'https://backend-of-research-nexus-ai.free.laravel.cloud/api',
-  'https://api.statanex.com/api',
+  // 'https://backend-of-research-nexus-ai.free.laravel.cloud/api',
+  // 'https://api.statanex.com/api',
 ];
 
 // API Client with authentication
@@ -14,8 +21,13 @@ class ApiClient {
 
   constructor(baseUrls: string[]) {
     this.availableUrls = baseUrls;
-    this.baseUrl = this.getStoredBaseUrl() || baseUrls[0];
-    this.currentUrlIndex = baseUrls.indexOf(this.baseUrl);
+    // FORCE localhost only - ignore any stored URL
+    this.baseUrl = baseUrls[0]; // Always use first URL (localhost)
+    this.currentUrlIndex = 0;
+    // Clear any stored remote URL
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('api_base_url');
+    }
   }
 
   private getStoredBaseUrl(): string | null {
@@ -32,9 +44,9 @@ class ApiClient {
   }
 
   private async tryNextUrl(): Promise<void> {
-    this.currentUrlIndex = (this.currentUrlIndex + 1) % this.availableUrls.length;
-    this.baseUrl = this.availableUrls[this.currentUrlIndex];
-    this.setStoredBaseUrl(this.baseUrl);
+    // DISABLED: Don't try other URLs, stay on localhost
+    console.warn('API request failed, but fallback URLs are disabled. Staying on localhost.');
+    return;
   }
 
   public getCurrentBaseUrl(): string {
@@ -94,70 +106,82 @@ class ApiClient {
     options: RequestInit = {},
     includeAuth: boolean = true
   ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
     const headers = this.getHeaders(includeAuth);
 
-    let lastError: any;
-    let attempts = 0;
-    const maxAttempts = this.availableUrls.length;
+    // FORCE localhost only - no retries with other URLs
+    const url = `${this.baseUrl}${endpoint}`;
+    
+    console.log(`API Request: ${options.method || 'GET'} ${url}`);
+    
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        ...headers,
+        ...options.headers,
+      },
+    });
 
-    while (attempts < maxAttempts) {
-      try {
-        const response = await fetch(url.replace(this.availableUrls[this.currentUrlIndex], this.baseUrl), {
-          ...options,
-          headers: {
-            ...headers,
-            ...options.headers,
-          },
-        });
+    if (!response.ok) {
+      // Parse error response
+      const error = await response.json().catch(() => ({
+        message: 'An error occurred',
+      }));
 
-        if (!response.ok) {
-          if (response.status === 401) {
-            this.removeToken();
-            if (typeof window !== 'undefined') {
-              window.location.href = '/login';
-            }
-            throw new Error('Authentication required. Please log in again.');
-          }
-
-          if (response.status === 403) {
-            throw new Error('You do not have permission to access this resource.');
-          }
-
-          const error = await response.json().catch(() => ({
-            message: 'An error occurred',
-          }));
-          
+      // Handle 401 Unauthorized - token expired or invalid
+      if (response.status === 401) {
+        // If this is a login request, show specific error
+        if (endpoint === '/login') {
           const errorMessage = error.message || 
-                             error.errors?.[Object.keys(error.errors)[0]]?.[0] || 
-                             `Request failed with status ${response.status}`;
-          
+                             error.errors?.password?.[0] || 
+                             'The password you entered is incorrect.';
           throw new Error(errorMessage);
         }
-
-        // Request successful, return response
-        return await response.json();
-      } catch (error: any) {
-        console.error(`API Request Error (${this.baseUrl}):`, error);
-        lastError = error;
-
-        // If it's a network error, try the next URL
-        if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
-          attempts++;
-          if (attempts < maxAttempts) {
-            console.log(`Trying next API URL (attempt ${attempts + 1}/${maxAttempts})...`);
-            await this.tryNextUrl();
-            continue;
-          }
-        } else {
-          // For non-network errors, throw immediately
-          throw error;
+        
+        // For review member checks, don't redirect - just throw error
+        if (endpoint.includes('/members') || endpoint.includes('/accept')) {
+          throw new Error('Unauthorized');
         }
+        
+        // For other requests, token is invalid - clear and redirect to login
+        this.removeToken();
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+        throw new Error('Session expired. Please login again.');
       }
+
+      // Handle 404 Not Found (user doesn't exist)
+      if (response.status === 404) {
+        const errorMessage = error.message || 
+                           error.errors?.email?.[0] || 
+                           'No account found with this email address.';
+        throw new Error(errorMessage);
+      }
+
+      // Handle 403 Forbidden
+      if (response.status === 403) {
+        const errorMessage = error.message || 'You do not have permission to access this resource.';
+        throw new Error(errorMessage);
+      }
+
+      // Handle 422 Validation Error
+      if (response.status === 422) {
+        const errorMessage = error.message || 
+                           error.errors?.[Object.keys(error.errors)[0]]?.[0] || 
+                           'Validation failed. Please check your input.';
+        throw new Error(errorMessage);
+      }
+      
+      // Generic error message
+      const errorMessage = error.message || 
+                         error.errors?.[Object.keys(error.errors)[0]]?.[0] || 
+                         `Request failed with status ${response.status}`;
+      
+      throw new Error(errorMessage);
     }
 
-    // All URLs failed
-    throw new Error('Unable to connect to any server. Please check your internet connection.');
+    // Request successful, return response
+    return await response.json();
   }
 
   // Auth Methods
@@ -308,8 +332,9 @@ class ApiClient {
   async updateArticleScreening(
     id: number,
     data: {
-      screening_decision: 'include' | 'exclude' | 'maybe';
+      screening_decision: 'included' | 'excluded' | 'undecided';
       screening_notes?: string;
+      labels?: string[];
       exclusion_reasons?: string[];
     }
   ) {
@@ -322,6 +347,70 @@ class ApiClient {
   async detectDuplicates(reviewId: number) {
     return this.request<any>(`/reviews/${reviewId}/articles/detect-duplicates`, {
       method: 'POST',
+    });
+  }
+
+  // Enhanced Duplicate Detection Methods
+  async detectDuplicatesEnhanced(
+    reviewId: number,
+    options?: {
+      clearExisting?: boolean;
+      incrementalOnly?: boolean;
+    }
+  ): Promise<DetectionResponse> {
+    return this.request<DetectionResponse>(`/reviews/${reviewId}/duplicates/detect`, {
+      method: 'POST',
+      body: JSON.stringify(options || {}),
+    });
+  }
+
+  async getDuplicates(
+    reviewId: number,
+    page: number = 1,
+    perPage: number = 20,
+    status?: string
+  ): Promise<PaginatedDuplicates> {
+    let url = `/reviews/${reviewId}/duplicates?page=${page}&per_page=${perPage}`;
+    if (status) {
+      url += `&status=${status}`;
+    }
+    return this.request<PaginatedDuplicates>(url);
+  }
+
+  async getDuplicateCounts(reviewId: number): Promise<StatusCounts> {
+    return this.request<StatusCounts>(`/reviews/${reviewId}/duplicates/counts`);
+  }
+
+  async updateDuplicateStatus(duplicateId: number, status: string): Promise<Duplicate> {
+    return this.request<Duplicate>(`/duplicates/${duplicateId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  async markNotDuplicate(duplicateId: number): Promise<void> {
+    await this.request<any>(`/duplicates/${duplicateId}/not-duplicate`, {
+      method: 'POST',
+    });
+  }
+
+  async deleteDuplicate(duplicateId: number): Promise<void> {
+    await this.request<{ message: string }>(`/duplicates/${duplicateId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async bulkResolveDuplicates(duplicateIds: number[]): Promise<void> {
+    await this.request<{ message: string }>('/duplicates/bulk-resolve', {
+      method: 'POST',
+      body: JSON.stringify({ duplicate_ids: duplicateIds }),
+    });
+  }
+
+  async bulkLabelDuplicates(duplicateIds: number[], label: string): Promise<void> {
+    await this.request<{ message: string }>('/duplicates/bulk-label', {
+      method: 'POST',
+      body: JSON.stringify({ duplicate_ids: duplicateIds, label }),
     });
   }
 
@@ -379,9 +468,20 @@ class ApiClient {
 
   // Team Member Methods
   async getTeamMembers(reviewId: number) {
-    const response = await this.request<any>(`/reviews/${reviewId}/members`);
-    // Handle both paginated and non-paginated responses
-    return Array.isArray(response) ? response : response.data || [];
+    try {
+      const response = await this.request<any>(`/reviews/${reviewId}/members`);
+      // Handle both paginated and non-paginated responses
+      return Array.isArray(response) ? response : response.data || [];
+    } catch (error: any) {
+      // Return empty array if user doesn't have access
+      // This prevents console spam when checking for pending invitations
+      if (error.message?.includes('Unauthorized') || 
+          error.message?.includes('permission') ||
+          error.message?.includes('Session expired')) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async addTeamMember(
@@ -403,10 +503,12 @@ class ApiClient {
 
   // Settings Methods
   async getSettings() {
-    return this.request<{
-      website_name: string;
-      logo_url: string | null;
-    }>('/settings', {}, false);
+    // DISABLED: Return static defaults to prevent reload loops
+    // The branding system now uses localStorage only
+    return {
+      website_name: 'Research Nexus',
+      logo_url: '/logo-static.png',
+    };
   }
 
   // Helper Methods

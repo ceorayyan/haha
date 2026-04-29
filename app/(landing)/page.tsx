@@ -8,7 +8,11 @@ import "../landing.css";
 
 export default function LandingPage() {
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isDark, setIsDark] = useState(true);
+  const [isDark, setIsDark] = useState(() => {
+    // Initialize from system preference (client component)
+    if (typeof window === "undefined") return true;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
   const [websiteName, setWebsiteName] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -26,10 +30,6 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
-    // Check system preference
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    setIsDark(prefersDark);
-
     // Fetch settings from backend
     const fetchSettings = async () => {
       try {
@@ -134,7 +134,7 @@ export default function LandingPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.4 }}
             >
-              Systematic Reviews
+              Systematic Reviews and Meta Analysis
               <br />
               <span className="gradient-text">Made Simple</span>
             </motion.h1>
@@ -145,7 +145,7 @@ export default function LandingPage() {
               transition={{ duration: 0.8, delay: 0.5 }}
               className="hero-desc"
             >
-              Collaborate with your team, screen articles efficiently, and manage your systematic literature reviews with powerful tools designed for researchers.
+              Collaborate with your team, screen articles efficiently, and manage your systematic literature reviews and meta analysis with powerful tools designed for researchers.
             </motion.p>
 
             <motion.div
@@ -269,10 +269,10 @@ export default function LandingPage() {
               <h2 className="section-title">
                 Everything you need for
                 <br />
-                systematic reviews
+                systematic reviews and meta analysis
               </h2>
               <p className="section-desc">
-                Powerful tools designed specifically for research teams conducting systematic literature reviews.
+                Powerful tools designed specifically for research teams conducting systematic literature reviews and meta analysis.
               </p>
             </div>
           </FadeInSection>
@@ -288,7 +288,7 @@ export default function LandingPage() {
                 </svg>
               }
               title="Team Collaboration"
-              description="Invite team members, assign roles, and work together seamlessly on your systematic reviews."
+              description="Invite team members, assign roles, and work together seamlessly on your systematic reviews and meta analysis."
               delay={0.1}
             />
             <FeatureCard
@@ -390,7 +390,7 @@ export default function LandingPage() {
           <FadeInSection>
             <div className="cta-content">
               <h2>Ready to streamline your research?</h2>
-              <p>Join hundreds of research teams using {websiteName} for their systematic reviews.</p>
+              <p>Join hundreds of research teams using {websiteName} for their systematic reviews and meta analysis.</p>
               <div className="cta-buttons">
                 <Link href="/register" className="btn btn-primary btn-lg">
                   Start Free Trial
@@ -417,7 +417,7 @@ export default function LandingPage() {
                 <span>{websiteName}</span>
               </div>
               <p className="footer-desc">
-                Streamline your systematic literature reviews with powerful collaboration tools.
+                Streamline your systematic literature reviews and meta analysis with powerful collaboration tools.
               </p>
               <div className="footer-social">
                 <a href="#" className="social-link" aria-label="Twitter">

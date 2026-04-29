@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import api from "../../../../lib/api";
 
 export default function OverviewPage() {
@@ -138,9 +139,9 @@ export default function OverviewPage() {
       <div className="p-6 flex items-center justify-center min-h-screen">
         <div className="text-center">
           <p className="text-lg text-gray-600 dark:text-gray-400">Review not found.</p>
-          <a href="/reviews" className="mt-4 inline-block text-sm text-blue-600 hover:underline">
+          <Link href="/reviews" className="mt-4 inline-block text-sm text-blue-600 hover:underline">
             ← Back to Reviews
-          </a>
+          </Link>
         </div>
       </div>
     );

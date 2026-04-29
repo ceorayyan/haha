@@ -19,25 +19,36 @@ export default function ReviewDetailLayout({ children }: { children: React.React
   useEffect(() => {
     const autoAcceptInvitation = async () => {
       try {
-        // Try to accept invitation first (will only work if user has a pending invitation)
-        try {
-          await api.request(`/reviews/${reviewId}/accept`, { method: 'POST' });
-          setInvitationAccepted(true);
-          console.log("Invitation auto-accepted");
-        } catch (error: any) {
-          // Silently fail - user might not have a pending invitation or already accepted
-          // This is expected for users who are already members or not invited
-          console.log("No pending invitation to accept or already accepted");
-        }
-        
-        // Fetch review data after attempting to accept invitation
+        // Fetch review data first to check if user has access
         const reviewData = await api.getReview(reviewId);
         setReview(reviewData);
+        
+        // Only try to accept invitation if user has a pending invitation
+        // Check if user is already a member or has pending invitation
+        const members = await api.getTeamMembers(reviewId);
+        const currentUser = api.getStoredUser();
+        
+        if (currentUser) {
+          const userMember = members.find((m: any) => 
+            m.user_id === currentUser.id || m.email === currentUser.email
+          );
+          
+          // Only attempt to accept if user has a pending invitation
+          if (userMember && userMember.status === 'pending') {
+            try {
+              await api.request(`/reviews/${reviewId}/accept`, { method: 'POST' });
+              setInvitationAccepted(true);
+            } catch (error: any) {
+              // Silently fail - invitation might have been accepted already
+            }
+          }
+        }
       } catch (error: any) {
-        console.error("Failed to load review:", error);
-        // Don't show error for permission issues - user might not have access yet
-        if (error.message?.includes('permission') || error.message?.includes('Unauthorized')) {
-          console.log("Waiting for review access...");
+        // Only log errors that aren't 401/403 (those are handled by api.ts)
+        if (!error.message?.includes('Session expired') && 
+            !error.message?.includes('permission') && 
+            !error.message?.includes('Unauthorized')) {
+          console.error("Failed to load review:", error);
         }
       }
     };

@@ -128,17 +128,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [blindMode, setBlindMode] = useState<BlindModeState>({ enabled: false, hiddenFields: [] });
   const [user] = useState<User>(mockData.user);
 
-  // Load data from localStorage or use mock data
+  // Load data from localStorage or use mock data - ONLY ONCE on mount
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
-  }, []);
-
-  // Load data from localStorage or use mock data
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => {
-    if (!mounted) return;
-
+    
     const savedReviews = localStorage.getItem("reviews");
     const savedArticles = localStorage.getItem("articles");
     const savedScreeningCriteria = localStorage.getItem("screeningCriteria");
@@ -167,7 +160,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } else {
       setBlindMode({ enabled: false, hiddenFields: ['reviewer_name', 'reviewer_avatar', 'reviewer_email'] });
     }
-  }, [mounted]);
+  }, []); // Empty dependency array - only run once on mount
 
   // Save to localStorage whenever data changes
   useEffect(() => {

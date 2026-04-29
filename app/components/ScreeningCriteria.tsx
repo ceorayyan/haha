@@ -10,38 +10,20 @@ interface ScreeningCriteriaProps {
   onDeleteCriteria: (id: number) => void;
 }
 
-export default function ScreeningCriteria({
-  reviewId,
-  criteria,
-  onAddCriteria,
+function CriteriaColumn({
+  title,
+  type,
+  items,
   onDeleteCriteria,
-}: ScreeningCriteriaProps) {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addType, setAddType] = useState<'inclusion' | 'exclusion'>('inclusion');
-  const [newCriteria, setNewCriteria] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-
-  const inclusionCriteria = criteria.filter((c) => c.type === 'inclusion');
-  const exclusionCriteria = criteria.filter((c) => c.type === 'exclusion');
-
-  const handleAddCriteria = () => {
-    if (newCriteria.trim()) {
-      onAddCriteria(addType, newCriteria, newDescription || undefined);
-      setNewCriteria("");
-      setNewDescription("");
-      setShowAddModal(false);
-    }
-  };
-
-  const CriteriaColumn = ({
-    title,
-    type,
-    items,
-  }: {
-    title: string;
-    type: 'inclusion' | 'exclusion';
-    items: ScreeningCriteriaType[];
-  }) => (
+  onOpenAdd,
+}: {
+  title: string;
+  type: 'inclusion' | 'exclusion';
+  items: ScreeningCriteriaType[];
+  onDeleteCriteria: (id: number) => void;
+  onOpenAdd: () => void;
+}) {
+  return (
     <div className="flex-1">
       <div className="mb-3">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">{title}</h3>
@@ -79,16 +61,36 @@ export default function ScreeningCriteria({
         ))}
       </div>
       <button
-        onClick={() => {
-          setAddType(type);
-          setShowAddModal(true);
-        }}
+        onClick={onOpenAdd}
         className="mt-3 w-full text-sm border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
       >
         + Add {type === 'inclusion' ? 'Inclusion' : 'Exclusion'} Criteria
       </button>
     </div>
   );
+}
+
+export default function ScreeningCriteria({
+  criteria,
+  onAddCriteria,
+  onDeleteCriteria,
+}: ScreeningCriteriaProps) {
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addType, setAddType] = useState<'inclusion' | 'exclusion'>('inclusion');
+  const [newCriteria, setNewCriteria] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+
+  const inclusionCriteria = criteria.filter((c) => c.type === 'inclusion');
+  const exclusionCriteria = criteria.filter((c) => c.type === 'exclusion');
+
+  const handleAddCriteria = () => {
+    if (newCriteria.trim()) {
+      onAddCriteria(addType, newCriteria, newDescription || undefined);
+      setNewCriteria("");
+      setNewDescription("");
+      setShowAddModal(false);
+    }
+  };
 
   return (
     <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden shadow-sm">
@@ -96,8 +98,26 @@ export default function ScreeningCriteria({
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Screening Criteria</h2>
       </div>
       <div className="p-6 flex gap-6">
-        <CriteriaColumn title="Inclusion Criteria" type="inclusion" items={inclusionCriteria} />
-        <CriteriaColumn title="Exclusion Criteria" type="exclusion" items={exclusionCriteria} />
+        <CriteriaColumn
+          title="Inclusion Criteria"
+          type="inclusion"
+          items={inclusionCriteria}
+          onDeleteCriteria={onDeleteCriteria}
+          onOpenAdd={() => {
+            setAddType("inclusion");
+            setShowAddModal(true);
+          }}
+        />
+        <CriteriaColumn
+          title="Exclusion Criteria"
+          type="exclusion"
+          items={exclusionCriteria}
+          onDeleteCriteria={onDeleteCriteria}
+          onOpenAdd={() => {
+            setAddType("exclusion");
+            setShowAddModal(true);
+          }}
+        />
       </div>
 
       {/* Add Criteria Modal */}
