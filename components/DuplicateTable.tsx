@@ -14,12 +14,15 @@ interface DuplicateTableProps {
   currentUser?: string;
   activeDuplicateId?: number | null;
   onActiveDuplicateIdChange?: (duplicateId: number) => void;
+  onActiveArticleIdChange?: (articleId: number) => void;
   onRowDoubleClick?: (articleId: number) => void;
 }
 
 export interface DuplicateTableHandle {
   applyNoteToSelected: (selectedDuplicateIds: number[], note: string, author: string) => void;
+  applyNoteToArticle: (articleId: number, note: string, author: string) => void;
   applyLabelToSelected: (selectedDuplicateIds: number[], label: string) => void;
+  applyLabelToArticle: (articleId: number, label: string) => void;
   getAvailableLabels: () => string[];
   getSelectedDuplicatePairs: () => Array<{
     duplicateId: number;
@@ -56,7 +59,7 @@ interface ArticleWithDuplicate {
 }
 
 const DuplicateTable = forwardRef<DuplicateTableHandle, DuplicateTableProps>(
-  function DuplicateTable({ reviewId, statusFilter = 'unresolved', onCountsUpdate, onSelectionChange, clearSelection, currentUser = 'You', activeDuplicateId, onActiveDuplicateIdChange, onRowDoubleClick }, ref) {
+  function DuplicateTable({ reviewId, statusFilter = 'unresolved', onCountsUpdate, onSelectionChange, clearSelection, currentUser = 'You', activeDuplicateId, onActiveDuplicateIdChange, onActiveArticleIdChange, onRowDoubleClick }, ref) {
   // State management
   const [articles, setArticles] = useState<ArticleWithDuplicate[]>([]);
   const [loading, setLoading] = useState(false);
@@ -101,6 +104,8 @@ const DuplicateTable = forwardRef<DuplicateTableHandle, DuplicateTableProps>(
   const [availableLabels, setAvailableLabels] = useState<string[]>([]);
   const [showNotePopup, setShowNotePopup] = useState<number | null>(null);
   const [showLabelPopup, setShowLabelPopup] = useState<number | null>(null);
+  // Track active row by articleId (unique per row) — separate from activeDuplicateId which is pair-level
+  const [activeRowArticleId, setActiveRowArticleId] = useState<number | null>(null);
 
   // Expose imperative methods to parent so ActionBar can update rows
   useImperativeHandle(ref, () => ({
@@ -111,10 +116,25 @@ const DuplicateTable = forwardRef<DuplicateTableHandle, DuplicateTableProps>(
           : a
       ));
     },
+    applyNoteToArticle(articleId: number, note: string, author: string) {
+      setArticles(prev => prev.map(a =>
+        a.articleId === articleId
+          ? { ...a, notes: note, noteAuthor: author }
+          : a
+      ));
+    },
     applyLabelToSelected(selectedDuplicateIds: number[], label: string) {
       setAvailableLabels(prev => prev.includes(label) ? prev : [...prev, label]);
       setArticles(prev => prev.map(a =>
         selectedDuplicateIds.includes(a.duplicateId)
+          ? { ...a, labels: [...new Set([...(a.labels || []), label])] }
+          : a
+      ));
+    },
+    applyLabelToArticle(articleId: number, label: string) {
+      setAvailableLabels(prev => prev.includes(label) ? prev : [...prev, label]);
+      setArticles(prev => prev.map(a =>
+        a.articleId === articleId
           ? { ...a, labels: [...new Set([...(a.labels || []), label])] }
           : a
       ));
@@ -155,6 +175,7 @@ const DuplicateTable = forwardRef<DuplicateTableHandle, DuplicateTableProps>(
     setCurrentPage(1);
     setHasMore(true);
     setSelectedIds([]);
+    setActiveRowArticleId(null);
     selectedPairsRef.current = {};
     allPairsRef.current = {};
     allPairsOrderRef.current = [];
@@ -224,7 +245,7 @@ const DuplicateTable = forwardRef<DuplicateTableHandle, DuplicateTableProps>(
           allPairsOrderRef.current.push(dup.id);
         }
 
-        // Add article 1
+        // Add article 1 — include labels and notes persisted on the article
         flattenedArticles.push({
           articleId: dup.article1_id,
           title: dup.article1_title,
@@ -237,8 +258,26 @@ const DuplicateTable = forwardRef<DuplicateTableHandle, DuplicateTableProps>(
           duplicateCreatedAt: dup.article2_created_at,
           similarityScore: dup.similarity_score,
           detectionReason: dup.detection_reason,
-          notes: undefined, // Will be loaded from article data if needed
-          labels: [], // Will be loaded from article data if needed
+          notes: dup.article1_screening_notes || undefined,
+          labels: dup.article1_labels && dup.article1_labels.length > 0 ? dup.article1_labels : [],
+          noteAuthor: undefined,
+        });
+
+        // Add article 2 — so its labels/notes are also visible in the table
+        flattenedArticles.push({
+          articleId: dup.article2_id,
+          title: dup.article2_title,
+          authors: dup.article2_authors || '',
+          createdAt: dup.article2_created_at,
+          duplicateId: dup.id,
+          duplicateArticleId: dup.article1_id,
+          duplicateTitle: dup.article1_title,
+          duplicateAuthors: dup.article1_authors || '',
+          duplicateCreatedAt: dup.article1_created_at,
+          similarityScore: dup.similarity_score,
+          detectionReason: dup.detection_reason,
+          notes: dup.article2_screening_notes || undefined,
+          labels: dup.article2_labels && dup.article2_labels.length > 0 ? dup.article2_labels : [],
           noteAuthor: undefined,
         });
       });
@@ -524,21 +563,27 @@ const DuplicateTable = forwardRef<DuplicateTableHandle, DuplicateTableProps>(
                 key={`${article.duplicateId}-${article.articleId}`}
                 className="transition-all duration-150 group border-b border-[var(--border-subtle)]"
                 style={{
-                      background:
-                        selectedIds.includes(article.duplicateId) || activeDuplicateId === article.duplicateId
-                          ? "var(--accent-soft)"
-                          : undefined,
+                  background:
+                    selectedIds.includes(article.duplicateId) || activeRowArticleId === article.articleId
+                      ? "var(--accent-soft)"
+                      : undefined,
                 }}
-                    onClick={() => onActiveDuplicateIdChange?.(article.duplicateId)}
-                    onDoubleClick={() => onRowDoubleClick?.(article.articleId)}
+                onClick={() => {
+                  setActiveRowArticleId(article.articleId);
+                  // Still notify parent of the pair so resolve queue works
+                  onActiveDuplicateIdChange?.(article.duplicateId);
+                  // Notify parent of the specific article clicked for ActionBar targeting
+                  onActiveArticleIdChange?.(article.articleId);
+                }}
+                onDoubleClick={() => onRowDoubleClick?.(article.articleId)}
                 onMouseEnter={(e) => {
-                      if (!selectedIds.includes(article.duplicateId) && activeDuplicateId !== article.duplicateId) {
+                  if (!selectedIds.includes(article.duplicateId) && activeRowArticleId !== article.articleId) {
                     (e.currentTarget as HTMLTableRowElement).style.background = "var(--surface-2)";
                   }
                   (e.currentTarget as HTMLTableRowElement).style.boxShadow = "inset 2px 0 0 var(--accent)";
                 }}
                 onMouseLeave={(e) => {
-                      if (!selectedIds.includes(article.duplicateId) && activeDuplicateId !== article.duplicateId) {
+                  if (!selectedIds.includes(article.duplicateId) && activeRowArticleId !== article.articleId) {
                     (e.currentTarget as HTMLTableRowElement).style.background = "";
                   }
                   (e.currentTarget as HTMLTableRowElement).style.boxShadow = "";

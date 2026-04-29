@@ -84,6 +84,8 @@ export default function ReviewDataPage() {
   const duplicateTableRef = useRef<DuplicateTableHandle>(null);
   const [selectedDuplicateIds, setSelectedDuplicateIds] = useState<number[]>([]);
   const [activeDuplicateId, setActiveDuplicateId] = useState<number | null>(null);
+  // Track the specific article row clicked in the duplicate table (not the pair ID)
+  const [activeDuplicateArticleId, setActiveDuplicateArticleId] = useState<number | null>(null);
   const [clearDuplicateSelection, setClearDuplicateSelection] = useState(false);
   const [showManualDuplicateResolve, setShowManualDuplicateResolve] = useState(false);
   const [duplicateResolveQueue, setDuplicateResolveQueue] = useState<DuplicateResolvePair[]>([]);
@@ -142,7 +144,10 @@ export default function ReviewDataPage() {
 
   // When switching duplicate views, reset active single-selection so the table can auto-pick row 1.
   useEffect(() => {
-    if (showDuplicatesInTable) setActiveDuplicateId(null);
+    if (showDuplicatesInTable) {
+      setActiveDuplicateId(null);
+      setActiveDuplicateArticleId(null);
+    }
   }, [showDuplicatesInTable, statusFilter]);
 
   const fetchDuplicateCounts = async () => {
@@ -972,6 +977,7 @@ export default function ReviewDataPage() {
                     currentUser={api.getStoredUser()?.name || 'You'}
                     activeDuplicateId={activeDuplicateId}
                     onActiveDuplicateIdChange={(id) => setActiveDuplicateId(id)}
+                    onActiveArticleIdChange={(id) => setActiveDuplicateArticleId(id)}
                     onRowDoubleClick={async (articleId) => {
                       try {
                         const art = await api.getArticle(articleId);
@@ -1068,8 +1074,8 @@ export default function ReviewDataPage() {
           const effectiveIds = showDuplicatesInTable
             ? selectedDuplicateIds.length > 0
               ? selectedDuplicateIds
-              : activeDuplicateId !== null
-                ? [activeDuplicateId]
+              : activeDuplicateArticleId !== null
+                ? [activeDuplicateArticleId]
                 : []
             : selectedArticles.length > 0
               ? selectedArticles
@@ -1087,16 +1093,26 @@ export default function ReviewDataPage() {
                 setGlobalLabels(prev => prev.includes(label) ? prev : [...prev, label]);
 
                 if (showDuplicatesInTable) {
-                  const targets = selectedDuplicateIds.length > 0
-                    ? selectedDuplicateIds
-                    : activeDuplicateId !== null ? [activeDuplicateId] : [];
-                  if (targets.length === 0) return;
-                  duplicateTableRef.current?.applyLabelToSelected(targets, label);
-                  toast.success(`Label "${label}" applied to ${targets.length} item(s)!`, { duration: 3000, position: 'bottom-right' });
+                  // Use checkbox selection (duplicateIds) for bulk, or the specific clicked articleId for single
                   if (selectedDuplicateIds.length > 0) {
+                    duplicateTableRef.current?.applyLabelToSelected(selectedDuplicateIds, label);
+                    toast.success(`Label "${label}" applied to ${selectedDuplicateIds.length} item(s)!`, { duration: 3000, position: 'bottom-right' });
                     setSelectedDuplicateIds([]);
                     setClearDuplicateSelection(true);
                     setTimeout(() => setClearDuplicateSelection(false), 100);
+                  } else if (activeDuplicateArticleId !== null) {
+                    // Single article — persist to DB by articleId
+                    const art = articles.find(a => a.id === activeDuplicateArticleId);
+                    const updatedLabels = [...new Set([...(art?.labels || []), label])];
+                    try {
+                      await api.updateArticle(activeDuplicateArticleId, { labels: updatedLabels });
+                      // Update the duplicate table row via the pair's duplicateId but only for this article
+                      duplicateTableRef.current?.applyLabelToArticle(activeDuplicateArticleId, label);
+                      toast.success(`Label "${label}" applied!`, { duration: 3000, position: 'bottom-right' });
+                    } catch (err) {
+                      console.error('Failed to save label:', err);
+                      toast.error('Failed to save label', { duration: 3000, position: 'bottom-right' });
+                    }
                   }
                 } else {
                   const targets = selectedArticles.length > 0
@@ -1139,9 +1155,19 @@ export default function ReviewDataPage() {
                 const user = api.getStoredUser();
                 const userName = user?.name || 'You';
                 if (showDuplicatesInTable) {
-                  const targets = selectedDuplicateIds.length > 0 ? selectedDuplicateIds : (activeDuplicateId !== null ? [activeDuplicateId] : []);
-                  if (targets.length === 0) return;
-                  duplicateTableRef.current?.applyNoteToSelected(targets, note, userName);
+                  if (selectedDuplicateIds.length > 0) {
+                    // Bulk — apply note to all selected pairs' rows
+                    duplicateTableRef.current?.applyNoteToSelected(selectedDuplicateIds, note, userName);
+                  } else if (activeDuplicateArticleId !== null) {
+                    // Single article — persist to DB by articleId
+                    try {
+                      await api.updateArticle(activeDuplicateArticleId, { screening_notes: note });
+                      duplicateTableRef.current?.applyNoteToArticle(activeDuplicateArticleId, note, userName);
+                    } catch (err) {
+                      console.error('Failed to save note:', err);
+                      toast.error('Failed to save note', { duration: 3000, position: 'bottom-right' });
+                    }
+                  }
                 } else {
                   const targets = selectedArticles.length > 0 ? selectedArticles : (activeArticleId !== null ? [activeArticleId] : []);
                   if (targets.length === 0) return;

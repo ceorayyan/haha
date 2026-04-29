@@ -19,6 +19,10 @@ export interface Duplicate {
   article2_authors?: string;
   article1_created_at: string;
   article2_created_at: string;
+  article1_labels?: string[];
+  article1_screening_notes?: string;
+  article2_labels?: string[];
+  article2_screening_notes?: string;
   similarity_score: number;
   detection_reason: string;
   status: 'unresolved' | 'deleted' | 'not_duplicate' | 'resolved';
