@@ -48,7 +48,7 @@ export default function ReviewDataPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("title");
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [totalArticles, setTotalArticles] = useState(0);
   const [selectedArticles, setSelectedArticles] = useState<number[]>([]);
   const [activeArticleId, setActiveArticleId] = useState<number | null>(null);
@@ -108,8 +108,15 @@ export default function ReviewDataPage() {
           _labels: a.labels && a.labels.length > 0 ? a.labels : a._labels,
           _note: a.screening_notes || a._note,
         }));
-        setArticles(mappedArticles);
-        setTotalPages(articlesData?.last_page || 1);
+        
+        // Append to existing articles for infinite scroll
+        if (currentPage === 1) {
+          setArticles(mappedArticles);
+        } else {
+          setArticles(prev => [...prev, ...mappedArticles]);
+        }
+        
+        setHasMore(articlesData?.current_page < articlesData?.last_page);
         setTotalArticles(articlesData?.total || articlesArray.length);
 
         const fileMap = new Map<string, number>();
@@ -201,6 +208,33 @@ export default function ReviewDataPage() {
       return firstId;
     });
   }, [showDuplicatesInTable, sortedArticles]);
+
+  // Infinite scroll observer
+  const observerTarget = useRef<HTMLTableRowElement>(null);
+  
+  useEffect(() => {
+    if (showDuplicatesInTable) return; // Only for articles table
+    
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && hasMore && !loading) {
+          setCurrentPage(prev => prev + 1);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [hasMore, loading, showDuplicatesInTable]);
 
   const decisionDot = (d: string | null) => {
     if (d === "include") return <span className="inline-block w-2 h-2 rounded-full bg-green-500" />;
@@ -452,8 +486,13 @@ export default function ReviewDataPage() {
       }
       const articlesData = await api.getArticles(reviewId, 1, 100);
       const articlesArray = Array.isArray(articlesData) ? articlesData : articlesData?.data || [];
-      setArticles(articlesArray);
-      setTotalPages(articlesData?.last_page || 1);
+      const mappedArticles = articlesArray.map((a: Article) => ({
+        ...a,
+        _labels: a.labels && a.labels.length > 0 ? a.labels : a._labels,
+        _note: a.screening_notes || a._note,
+      }));
+      setArticles(mappedArticles);
+      setHasMore(articlesData?.current_page < articlesData?.last_page);
       setTotalArticles(articlesData?.total || articlesArray.length);
       setCurrentPage(1);
       const fileMap = new Map<string, number>();
@@ -492,8 +531,13 @@ export default function ReviewDataPage() {
       }
       const articlesData = await api.getArticles(reviewId, 1, 100);
       const articlesArray = Array.isArray(articlesData) ? articlesData : articlesData?.data || [];
-      setArticles(articlesArray);
-      setTotalPages(articlesData?.last_page || 1);
+      const mappedArticles = articlesArray.map((a: Article) => ({
+        ...a,
+        _labels: a.labels && a.labels.length > 0 ? a.labels : a._labels,
+        _note: a.screening_notes || a._note,
+      }));
+      setArticles(mappedArticles);
+      setHasMore(articlesData?.current_page < articlesData?.last_page);
       setTotalArticles(articlesData?.total || articlesArray.length);
       setCurrentPage(1);
       const fileMap = new Map<string, number>();
@@ -905,9 +949,7 @@ export default function ReviewDataPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-subtle)]">
-              {loading ? (
-                Array.from({ length: 12 }).map((_, idx) => <SkeletonRow key={idx} />)
-              ) : activeTab === 'duplicates' ? (
+              {activeTab === 'duplicates' ? (
                 <>
                   <DuplicateTable
                     ref={duplicateTableRef}
@@ -931,79 +973,89 @@ export default function ReviewDataPage() {
                   />
                 </>
               ) : (
-                sortedArticles.map((article, idx) => (
-                  <tr
-                    key={article.id}
-                    className="hover:bg-[var(--surface-2)] transition-colors cursor-pointer group border-b border-[var(--border-subtle)]"
-                    style={{
-                      background: activeArticleId === article.id ? "var(--accent-soft)" : undefined,
-                    }}
-                    onClick={() => setActiveArticleId(article.id)}
-                    onDoubleClick={() => setSelectedArticleModal(article)}
-                  >
-                    <td className="px-4 py-3 align-top" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selectedArticles.includes(article.id)}
-                        onChange={() => toggleSelectArticle(article.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 accent-[var(--accent)] opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-                        style={{ opacity: selectedArticles.includes(article.id) ? 1 : undefined }}
-                      />
-                    </td>
-                    <td className="px-3 py-3 text-xs text-[var(--text-muted)] align-top tabular-nums">{(currentPage - 1) * 100 + idx + 1}</td>
-                    <td className="px-4 py-3">
-                      {/* Title */}
-                      <p
-                        className="text-sm text-[var(--text-primary)] font-normal leading-snug mb-1"
-                        dangerouslySetInnerHTML={{ __html: highlightText(article.title) }}
-                      />
-                      {/* Labels and Notes on same line */}
-                      {(article._labels && article._labels.length > 0) || article._note ? (
-                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                          {/* Labels */}
-                          {article._labels && article._labels.length > 0 && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setArticleLabelPopup(article.id); }}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold transition-all hover:opacity-80"
-                              style={{
-                                background: "var(--accent-soft)",
-                                border: "1px solid var(--accent-border)",
-                                color: "var(--accent-light)",
-                              }}
-                              title={`${article._labels.length} label(s)`}
-                            >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                              </svg>
-                              <span>{article._labels.length}</span>
-                            </button>
-                          )}
-                          {/* Note */}
-                          {article._note && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setArticleNotePopup(article.id); }}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold transition-all hover:opacity-80"
-                              style={{
-                                background: "var(--accent-soft)",
-                                border: "1px solid var(--accent-border)",
-                                color: "var(--accent-light)",
-                              }}
-                              title={`Note by ${article._noteAuthor || 'You'}`}
-                            >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                              </svg>
-                              <span className="truncate max-w-[120px]">{article._note}</span>
-                            </button>
-                          )}
-                        </div>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-[var(--text-secondary)] align-top tabular-nums">{new Date(article.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
-                    <td className="px-4 py-3 text-xs text-[var(--text-secondary)] align-top truncate" title={article.authors}>{article.authors || "—"}</td>
-                  </tr>
-                ))
+                <>
+                  {sortedArticles.map((article, idx) => (
+                    <tr
+                      key={article.id}
+                      className="hover:bg-[var(--surface-2)] transition-colors cursor-pointer group border-b border-[var(--border-subtle)]"
+                      style={{
+                        background: activeArticleId === article.id ? "var(--accent-soft)" : undefined,
+                      }}
+                      onClick={() => setActiveArticleId(article.id)}
+                      onDoubleClick={() => setSelectedArticleModal(article)}
+                    >
+                      <td className="px-4 py-3 align-top" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedArticles.includes(article.id)}
+                          onChange={() => toggleSelectArticle(article.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 accent-[var(--accent)] opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                          style={{ opacity: selectedArticles.includes(article.id) ? 1 : undefined }}
+                        />
+                      </td>
+                      <td className="px-3 py-3 text-xs text-[var(--text-muted)] align-top tabular-nums">{idx + 1}</td>
+                      <td className="px-4 py-3">
+                        {/* Title */}
+                        <p
+                          className="text-sm text-[var(--text-primary)] font-normal leading-snug mb-1"
+                          dangerouslySetInnerHTML={{ __html: highlightText(article.title) }}
+                        />
+                        {/* Labels and Notes on same line */}
+                        {(article._labels && article._labels.length > 0) || article._note ? (
+                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                            {/* Labels */}
+                            {article._labels && article._labels.length > 0 && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setArticleLabelPopup(article.id); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold transition-all hover:opacity-80"
+                                style={{
+                                  background: "var(--accent-soft)",
+                                  border: "1px solid var(--accent-border)",
+                                  color: "var(--accent-light)",
+                                }}
+                                title={`${article._labels.length} label(s) by ${article._noteAuthor || 'You'}`}
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                </svg>
+                                <span>{article._labels.length}</span>
+                              </button>
+                            )}
+                            {/* Note */}
+                            {article._note && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setArticleNotePopup(article.id); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold transition-all hover:opacity-80"
+                                style={{
+                                  background: "var(--accent-soft)",
+                                  border: "1px solid var(--accent-border)",
+                                  color: "var(--accent-light)",
+                                }}
+                                title={`Note by ${article._noteAuthor || 'You'}`}
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                                </svg>
+                                <span className="truncate max-w-[120px]">{article._note}</span>
+                              </button>
+                            )}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-[var(--text-secondary)] align-top tabular-nums">{new Date(article.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+                      <td className="px-4 py-3 text-xs text-[var(--text-secondary)] align-top truncate" title={article.authors}>{article.authors || "—"}</td>
+                    </tr>
+                  ))}
+                  {/* Skeleton loading rows */}
+                  {loading && Array.from({ length: 5 }).map((_, idx) => <SkeletonRow key={`skeleton-${idx}`} />)}
+                  {/* Infinite scroll observer target */}
+                  {!loading && hasMore && (
+                    <tr ref={observerTarget}>
+                      <td colSpan={5} className="h-4"></td>
+                    </tr>
+                  )}
+                </>
               )}
             </tbody>
           </table>
@@ -1133,11 +1185,6 @@ export default function ReviewDataPage() {
                   }
                 }
               }}
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPrevPage={() => setCurrentPage(p => Math.max(1, p - 1))}
-              onNextPage={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              loadingPages={loading}
               selectionCount={effectiveIds.length}
             />
           );
@@ -1403,47 +1450,44 @@ export default function ReviewDataPage() {
         />
       )}
 
-      {/* ARTICLE NOTE POPUP */}
+      {/* ARTICLE NOTE POPUP - Compact Popover */}
       {articleNotePopup !== null && (() => {
         const art = articles.find(a => a.id === articleNotePopup);
         if (!art?._note) return null;
         return (
           <div
-            className="fixed inset-0 z-[70] flex items-center justify-center"
-            style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" }}
+            className="fixed inset-0 z-[70]"
             onClick={() => setArticleNotePopup(null)}
           >
             <div
-              className="rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden"
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl shadow-2xl max-w-xs w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
               style={{
                 background: "var(--surface-1)",
                 border: "1px solid var(--border-subtle)",
-                boxShadow: "0 24px 64px rgba(0,0,0,0.4), 0 0 0 1px var(--accent-border)",
+                boxShadow: "0 12px 32px rgba(0,0,0,0.3)",
               }}
               onClick={e => e.stopPropagation()}
             >
-              <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: "var(--border-subtle)" }}>
-                <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4" style={{ color: "var(--accent)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                  </svg>
-                  <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Notes</h3>
-                </div>
-                <button onClick={() => setArticleNotePopup(null)} className="p-1 rounded-lg transition-all hover:opacity-70" style={{ color: "var(--text-muted)" }}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "var(--border-subtle)" }}>
+                <svg className="w-4 h-4" style={{ color: "var(--accent)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                </svg>
+                <h3 className="text-xs font-bold flex-1" style={{ color: "var(--text-primary)" }}>Note</h3>
+                <button onClick={() => setArticleNotePopup(null)} className="p-0.5 rounded hover:bg-[var(--surface-2)] transition-colors" style={{ color: "var(--text-muted)" }}>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
-              <div className="px-5 py-4">
-                <div className="flex items-start gap-3">
+              <div className="px-4 py-3">
+                <div className="flex items-start gap-2">
                   <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                    style={{ background: "linear-gradient(135deg, var(--accent) 0%, var(--secondary) 100%)", boxShadow: "0 0 12px var(--accent-glow)" }}
+                    className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: "var(--accent)", opacity: 0.9 }}
                   >
-                    <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold mb-1" style={{ color: "var(--accent-light)" }}>{art._noteAuthor || 'You'}</p>
-                    <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>{art._note}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold mb-0.5" style={{ color: "var(--accent-light)" }}>{art._noteAuthor || 'You'}</p>
+                    <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>{art._note}</p>
                   </div>
                 </div>
               </div>
@@ -1452,49 +1496,45 @@ export default function ReviewDataPage() {
         );
       })()}
 
-      {/* ARTICLE LABEL POPUP */}
+      {/* ARTICLE LABEL POPUP - Compact Popover */}
       {articleLabelPopup !== null && (() => {
         const art = articles.find(a => a.id === articleLabelPopup);
         if (!art?._labels?.length) return null;
         return (
           <div
-            className="fixed inset-0 z-[70] flex items-center justify-center"
-            style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)" }}
+            className="fixed inset-0 z-[70]"
             onClick={() => setArticleLabelPopup(null)}
           >
             <div
-              className="rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden"
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl shadow-2xl max-w-xs w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
               style={{
                 background: "var(--surface-1)",
                 border: "1px solid var(--border-subtle)",
-                boxShadow: "0 24px 64px rgba(0,0,0,0.4), 0 0 0 1px var(--accent-border)",
+                boxShadow: "0 12px 32px rgba(0,0,0,0.3)",
               }}
               onClick={e => e.stopPropagation()}
             >
-              <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: "var(--border-subtle)" }}>
-                <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4" style={{ color: "var(--accent)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                  </svg>
-                  <h3 className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Labels</h3>
-                </div>
-                <button onClick={() => setArticleLabelPopup(null)} className="p-1 rounded-lg transition-all hover:opacity-70" style={{ color: "var(--text-muted)" }}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "var(--border-subtle)" }}>
+                <svg className="w-4 h-4" style={{ color: "var(--accent)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                <h3 className="text-xs font-bold flex-1" style={{ color: "var(--text-primary)" }}>Labels ({art._labels.length})</h3>
+                <button onClick={() => setArticleLabelPopup(null)} className="p-0.5 rounded hover:bg-[var(--surface-2)] transition-colors" style={{ color: "var(--text-muted)" }}>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
-              <div className="px-5 py-4 space-y-2">
+              <div className="px-4 py-3 space-y-1.5 max-h-60 overflow-y-auto">
                 {art._labels!.map((label, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                  <div key={i} className="flex items-center gap-2 px-2.5 py-2 rounded-lg" style={{ background: "var(--surface-2)" }}>
                     <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-                      style={{ background: "linear-gradient(135deg, var(--accent) 0%, var(--secondary) 100%)" }}
+                      className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                      style={{ background: "var(--accent)", opacity: 0.9 }}
                     >
-                      <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+                      <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
                     </div>
-                    <div>
-                      <p className="text-xs font-semibold" style={{ color: "var(--accent-light)" }}>You</p>
-                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>Label: {label}</p>
-                    </div>
+                    <span className="text-xs font-medium flex-1" style={{ color: "var(--text-primary)" }}>{label}</span>
                   </div>
                 ))}
               </div>

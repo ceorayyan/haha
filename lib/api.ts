@@ -333,6 +333,7 @@ class ApiClient {
     id: number,
     data: {
       screening_decision: 'included' | 'excluded' | 'undecided';
+      screening_decision_by?: string;
       screening_notes?: string;
       labels?: string[];
       exclusion_reasons?: string[];
@@ -342,6 +343,15 @@ class ApiClient {
       method: 'PUT',
       body: JSON.stringify(data),
     });
+  }
+
+  async getScreeningStats(reviewId: number) {
+    return this.request<{
+      total: number;
+      undecided: number;
+      included: number;
+      excluded: number;
+    }>(`/reviews/${reviewId}/articles/screening-stats`);
   }
 
   async detectDuplicates(reviewId: number) {
