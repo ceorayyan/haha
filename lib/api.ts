@@ -388,6 +388,13 @@ class ApiClient {
     });
   }
 
+  async resolveDuplicate(duplicateId: number, keep: 'left' | 'right' | 'both'): Promise<Duplicate> {
+    return this.request<Duplicate>(`/duplicates/${duplicateId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ keep }),
+    });
+  }
+
   async markNotDuplicate(duplicateId: number): Promise<void> {
     await this.request<any>(`/duplicates/${duplicateId}/not-duplicate`, {
       method: 'POST',

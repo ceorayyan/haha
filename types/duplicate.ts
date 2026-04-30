@@ -26,6 +26,8 @@ export interface Duplicate {
   similarity_score: number;
   detection_reason: string;
   status: 'unresolved' | 'deleted' | 'not_duplicate' | 'resolved';
+  kept_article_id?: number | null;
+  loser_article_id?: number | null;
   marked_by_user_id?: number;
   created_at: string;
   updated_at: string;

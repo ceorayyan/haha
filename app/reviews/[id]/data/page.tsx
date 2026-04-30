@@ -9,6 +9,7 @@ import type { DuplicateTableHandle } from "@/components/DuplicateTable";
 import SidebarCounters from "@/components/SidebarCounters";
 import ActionBar from "@/components/ActionBar";
 import type { StatusCounts } from "@/types/duplicate";
+import FilterBar from "@/components/FilterBar";
 import ManualDuplicateResolveModal, { type DuplicateResolvePair } from "@/components/ManualDuplicateResolveModal";
 
 interface Article {
@@ -42,7 +43,6 @@ export default function ReviewDataPage() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [showFilters, setShowFilters] = useState(true);
   const [treeOpen, setTreeOpen] = useState(true);
-  const [dupOpen, setDupOpen] = useState(true);
   const [includeKeywords, setIncludeKeywords] = useState<string[]>([]);
   const [excludeKeywords, setExcludeKeywords] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -56,6 +56,7 @@ export default function ReviewDataPage() {
   const [detectingDuplicates, setDetectingDuplicates] = useState(false);
   const [showDuplicatesInTable, setShowDuplicatesInTable] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('unresolved');
+  const [activeTab, setActiveTab] = useState<'all_articles' | 'duplicates'>('all_articles');
   const [duplicateCounts, setDuplicateCounts] = useState<StatusCounts>({
     unresolved: 0,
     deleted: 0,
@@ -68,10 +69,6 @@ export default function ReviewDataPage() {
   const [selectedArticleModal, setSelectedArticleModal] = useState<Article | null>(null);
   const [bulkLabel, setBulkLabel] = useState<string>("");
   const [bulkNotes, setBulkNotes] = useState<string>("");
-  const [customIncludeKeyword, setCustomIncludeKeyword] = useState<string>("");
-  const [customExcludeKeyword, setCustomExcludeKeyword] = useState<string>("");
-  const [showIncludeInput, setShowIncludeInput] = useState(false);
-  const [showExcludeInput, setShowExcludeInput] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<number | null>(null);
   const [customLabel, setCustomLabel] = useState<string>("");
   const [importedFiles, setImportedFiles] = useState<ImportedFile[]>([]);
@@ -144,11 +141,14 @@ export default function ReviewDataPage() {
 
   // When switching duplicate views, reset active single-selection so the table can auto-pick row 1.
   useEffect(() => {
-    if (showDuplicatesInTable) {
+    if (activeTab === 'duplicates') {
       setActiveDuplicateId(null);
       setActiveDuplicateArticleId(null);
+      setShowDuplicatesInTable(true);
+    } else {
+      setShowDuplicatesInTable(false);
     }
-  }, [showDuplicatesInTable, statusFilter]);
+  }, [activeTab, statusFilter]);
 
   const fetchDuplicateCounts = async () => {
     try {
@@ -158,23 +158,6 @@ export default function ReviewDataPage() {
       console.error("Failed to fetch duplicate counts:", error);
     }
   };
-
-  const extractKeywords = () => {
-    const keywordMap = new Map<string, number>();
-    articles.forEach(article => {
-      const text = `${article.title} ${article.authors || ""} ${article.abstract || ""}`.toLowerCase();
-      const words = text.match(/\b\w{4,}\b/g) || [];
-      words.forEach(word => {
-        keywordMap.set(word, (keywordMap.get(word) || 0) + 1);
-      });
-    });
-    return Array.from(keywordMap.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 20)
-      .map(([word, count]) => ({ word, count }));
-  };
-
-  const keywords = extractKeywords();
 
   const highlightText = (text: string) => {
     if (!text) return text;
@@ -226,46 +209,6 @@ export default function ReviewDataPage() {
     return <span className="inline-block w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600" />;
   };
 
-  const toggleIncludeKeyword = (keyword: string) => {
-    setIncludeKeywords(prev =>
-      prev.includes(keyword) ? prev.filter(k => k !== keyword) : [...prev, keyword]
-    );
-  };
-
-  const toggleExcludeKeyword = (keyword: string) => {
-    setExcludeKeywords(prev =>
-      prev.includes(keyword) ? prev.filter(k => k !== keyword) : [...prev, keyword]
-    );
-  };
-
-  const addCustomIncludeKeyword = () => {
-    const words = customIncludeKeyword.split(',').map(w => w.trim()).filter(Boolean);
-    words.forEach(word => {
-      if (!includeKeywords.includes(word)) {
-        setIncludeKeywords(prev => [...prev, word]);
-      }
-    });
-    setCustomIncludeKeyword("");
-  };
-
-  const addCustomExcludeKeyword = () => {
-    const words = customExcludeKeyword.split(',').map(w => w.trim()).filter(Boolean);
-    words.forEach(word => {
-      if (!excludeKeywords.includes(word)) {
-        setExcludeKeywords(prev => [...prev, word]);
-      }
-    });
-    setCustomExcludeKeyword("");
-  };
-
-  const removeIncludeKeyword = (keyword: string) => {
-    setIncludeKeywords(prev => prev.filter(k => k !== keyword));
-  };
-
-  const removeExcludeKeyword = (keyword: string) => {
-    setExcludeKeywords(prev => prev.filter(k => k !== keyword));
-  };
-
   const handleUpdateCustomLabel = async (articleId: number, label: string) => {
     try {
       await api.updateArticle(articleId, { screening_notes: label });
@@ -289,6 +232,7 @@ export default function ReviewDataPage() {
       await fetchDuplicateCounts();
       
       // Show duplicates in table
+      setActiveTab('duplicates');
       setShowDuplicatesInTable(true);
       
       if (response?.data?.total_duplicates > 0) {
@@ -329,6 +273,7 @@ export default function ReviewDataPage() {
       await fetchDuplicateCounts();
       
       // Show duplicates in table
+      setActiveTab('duplicates');
       setShowDuplicatesInTable(true);
       
       if (response?.data?.total_duplicates > 0) {
@@ -386,31 +331,20 @@ export default function ReviewDataPage() {
 
     setManualDuplicateResolvingId(pair.duplicateId);
     try {
-      // Duplicate status mapping (pair-level):
-      // - Keep Left  -> Resolved tab
-      // - Keep Right -> Deleted tab
-      // - Keep Both  -> Not Duplicate tab
-      const nextDuplicateStatus = choice === "left" ? "resolved" : choice === "right" ? "deleted" : "not_duplicate";
-      await api.updateDuplicateStatus(pair.duplicateId, nextDuplicateStatus);
+      // Single API call handles everything atomically:
+      // - keep=left  → pair → "resolved", new "deleted" record created for right article
+      // - keep=right → pair → "resolved", new "deleted" record created for left article
+      // - keep=both  → pair → "not_duplicate"
+      await api.resolveDuplicate(pair.duplicateId, choice);
 
-      // Keep Left/Right: the unkept article should be deleted (so it won't appear in Screening later).
-      if (choice === "left") {
-        await api.deleteArticle(pair.right.articleId);
-        setArticles((prev) => prev.filter((a) => a.id !== pair.right.articleId));
-        setTotalArticles((prev) => Math.max(0, prev - 1));
-      } else if (choice === "right") {
-        await api.deleteArticle(pair.left.articleId);
-        setArticles((prev) => prev.filter((a) => a.id !== pair.left.articleId));
-        setTotalArticles((prev) => Math.max(0, prev - 1));
-      }
-
-      // Update UI immediately (no toasts on every action).
+      // Remove the pair from the duplicate table UI
       duplicateTableRef.current?.removeDuplicatePairs([pair.duplicateId]);
       setSelectedDuplicateIds((prev) => prev.filter((id) => id !== pair.duplicateId));
 
-      // Keep sidebar counters accurate while stepping through.
+      // Refresh sidebar counters (Unresolved ↓, Resolved ↑, Deleted ↑)
       await fetchDuplicateCounts();
 
+      // Advance to next pair or close modal
       const nextIndex = duplicateResolveIndex + 1;
       if (nextIndex >= duplicateResolveQueue.length) {
         setShowManualDuplicateResolve(false);
@@ -419,6 +353,7 @@ export default function ReviewDataPage() {
         setSelectedDuplicateIds([]);
         setClearDuplicateSelection(true);
         setTimeout(() => setClearDuplicateSelection(false), 100);
+        toast.success('All pairs resolved!', { duration: 3000, position: 'bottom-right' });
       } else {
         setDuplicateResolveIndex(nextIndex);
       }
@@ -606,7 +541,7 @@ export default function ReviewDataPage() {
     if (selectedDuplicateIds.length === 0) return;
     
     try {
-      // No bulk-resolve endpoint exists — resolve each pair individually
+      // Resolve each selected pair — mark as resolved (no article deletion)
       await Promise.all(
         selectedDuplicateIds.map(id => api.updateDuplicateStatus(id, 'resolved'))
       );
@@ -614,7 +549,7 @@ export default function ReviewDataPage() {
       // Refresh duplicate counts
       await fetchDuplicateCounts();
       
-      // Remove resolved pairs from the table
+      // Remove resolved pairs from the table UI
       duplicateTableRef.current?.removeDuplicatePairs(selectedDuplicateIds);
 
       // Clear selection
@@ -705,20 +640,6 @@ export default function ReviewDataPage() {
 
         {treeOpen && (
           <div className="flex-1 overflow-y-auto">
-            {/* Count */}
-            <div className="px-4 py-4 border-b border-[var(--border-subtle)]">
-              <div className="flex items-center gap-2 mb-1">
-                <svg className="w-3.5 h-3.5 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span className="text-xs text-[var(--text-muted)] font-medium">Articles</span>
-              </div>
-              <p className="text-xl font-bold text-[var(--text-primary)] tabular-nums">
-                {sortedArticles.length.toLocaleString()}
-                <span className="text-sm font-normal text-[var(--text-muted)] ml-1">/ {totalArticles.toLocaleString()}</span>
-              </p>
-            </div>
-
             {/* Imported References */}
             <div className="px-3 py-3 border-b border-[var(--border-subtle)]">
               <div className="flex items-center justify-between mb-2 px-1">
@@ -825,58 +746,79 @@ export default function ReviewDataPage() {
 
             {/* Possible Duplicates */}
             <div className="px-3 py-3">
-              <button
-                onClick={() => setDupOpen(v => !v)}
-                className="w-full flex items-center justify-between mb-2 px-1"
-              >
+              <div className="flex items-center justify-between mb-2 px-1">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
-                  Possible Dups
+                  Data Views
                 </div>
-                <svg className={`w-3.5 h-3.5 text-[var(--text-muted)] transition-transform ${dupOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
+              </div>
 
-              {dupOpen && (
-                <div className="space-y-0.5">
-                  <SidebarCounters
-                    counts={duplicateCounts}
-                    activeStatus={statusFilter}
-                    onStatusClick={(status) => {
-                      setStatusFilter(status);
-                      setShowDuplicatesInTable(true);
+              <div className="space-y-0.5">
+                {/* All Articles Tab */}
+                <button
+                  onClick={() => setActiveTab('all_articles')}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all duration-150 text-left"
+                  style={{
+                    background: activeTab === 'all_articles' ? "var(--accent-soft)" : "transparent",
+                    border: activeTab === 'all_articles' ? "1px solid var(--accent-border)" : "1px solid transparent",
+                  }}
+                  aria-label="View all articles"
+                  aria-pressed={activeTab === 'all_articles'}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ background: "#8B5CF6" }}
+                    />
+                    <span
+                      className="text-xs font-medium"
+                      style={{ color: activeTab === 'all_articles' ? "var(--accent)" : "var(--text-secondary)" }}
+                    >
+                      All Articles
+                    </span>
+                  </div>
+                  <span
+                    className="text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded-md"
+                    style={{
+                      background: activeTab === 'all_articles' ? "var(--accent)" : "var(--surface-3)",
+                      color: activeTab === 'all_articles' ? "#fff" : "var(--text-muted)",
                     }}
-                  />
-                  <div className="pt-1">
-                    {duplicateCounts.total === 0 ? (
+                  >
+                    {totalArticles.toLocaleString()}
+                  </span>
+                </button>
+
+                <SidebarCounters
+                  counts={duplicateCounts}
+                  activeStatus={activeTab === 'duplicates' ? statusFilter : ''}
+                  onStatusClick={(status) => {
+                    setStatusFilter(status);
+                    setActiveTab('duplicates');
+                    setShowDuplicatesInTable(true);
+                  }}
+                />
+                <div className="pt-1">
+                  {duplicateCounts.total === 0 ? (
+                    <button
+                      onClick={() => setShowDuplicateModal(true)}
+                      className="w-full py-2 text-xs font-semibold text-[var(--accent)] bg-[var(--accent-soft)] rounded-lg hover:bg-[var(--accent)] hover:text-white transition-colors border border-[var(--accent-border)]"
+                    >
+                      Detect Duplicates
+                    </button>
+                  ) : (
+                    <div className="space-y-1">
                       <button
-                        onClick={() => setShowDuplicateModal(true)}
+                        onClick={() => setShowRerunModal(true)}
                         className="w-full py-2 text-xs font-semibold text-[var(--accent)] bg-[var(--accent-soft)] rounded-lg hover:bg-[var(--accent)] hover:text-white transition-colors border border-[var(--accent-border)]"
                       >
-                        Detect Duplicates
+                        Re-run Detection
                       </button>
-                    ) : (
-                      <div className="space-y-1">
-                        <button
-                          onClick={() => setShowRerunModal(true)}
-                          className="w-full py-2 text-xs font-semibold text-[var(--accent)] bg-[var(--accent-soft)] rounded-lg hover:bg-[var(--accent)] hover:text-white transition-colors border border-[var(--accent-border)]"
-                        >
-                          Re-run Detection
-                        </button>
-                        <button
-                          onClick={() => { setShowDuplicatesInTable(false); }}
-                          className="w-full py-2 text-xs font-semibold text-[var(--text-secondary)] bg-[var(--surface-2)] rounded-lg hover:bg-[var(--border-subtle)] transition-colors"
-                        >
-                          Show All Articles
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </div>
         )}
@@ -887,16 +829,16 @@ export default function ReviewDataPage() {
         {/* Toolbar */}
         <div className="h-12 px-4 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0 gap-3">
           <span className="text-sm font-semibold text-[var(--text-primary)] shrink-0">
-            {showDuplicatesInTable
+            {activeTab === 'duplicates'
               ? `${duplicateCounts[statusFilter as keyof StatusCounts] || 0} ${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1).replace('_', ' ')} Duplicates`
               : loading ? "Loading…"
                 : `Showing ${sortedArticles.length.toLocaleString()} / ${totalArticles.toLocaleString()} Articles`}
-            {selectedArticles.length > 0 && (
+            {selectedArticles.length > 0 && activeTab === 'all_articles' && (
               <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">({selectedArticles.length} selected)</span>
             )}
           </span>
           <div className="flex items-center gap-2">
-              {showDuplicatesInTable && statusFilter === "unresolved" && duplicateCounts.unresolved > 0 && (
+              {activeTab === 'duplicates' && statusFilter === "unresolved" && duplicateCounts.unresolved > 0 && (
                 <button
                   onClick={handleBulkResolve}
                   className="px-3 py-1.5 text-xs font-semibold bg-[var(--accent)] text-white rounded-lg hover:opacity-90 transition-opacity font-medium"
@@ -965,7 +907,7 @@ export default function ReviewDataPage() {
             <tbody className="divide-y divide-[var(--border-subtle)]">
               {loading ? (
                 Array.from({ length: 12 }).map((_, idx) => <SkeletonRow key={idx} />)
-              ) : showDuplicatesInTable ? (
+              ) : activeTab === 'duplicates' ? (
                 <>
                   <DuplicateTable
                     ref={duplicateTableRef}
@@ -1016,49 +958,47 @@ export default function ReviewDataPage() {
                         className="text-sm text-[var(--text-primary)] font-normal leading-snug mb-1"
                         dangerouslySetInnerHTML={{ __html: highlightText(article.title) }}
                       />
-                      {/* Labels */}
-                      {article._labels && article._labels.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-1.5 mb-1">
-                          {article._labels.map((label, li) => (
+                      {/* Labels and Notes on same line */}
+                      {(article._labels && article._labels.length > 0) || article._note ? (
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          {/* Labels */}
+                          {article._labels && article._labels.length > 0 && (
                             <button
-                              key={li}
                               onClick={(e) => { e.stopPropagation(); setArticleLabelPopup(article.id); }}
-                              className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold transition-all hover:opacity-80"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold transition-all hover:opacity-80"
                               style={{
                                 background: "var(--accent-soft)",
                                 border: "1px solid var(--accent-border)",
                                 color: "var(--accent-light)",
                               }}
+                              title={`${article._labels.length} label(s)`}
                             >
-                              {label}
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                              </svg>
+                              <span>{article._labels.length}</span>
                             </button>
-                          ))}
+                          )}
+                          {/* Note */}
+                          {article._note && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setArticleNotePopup(article.id); }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold transition-all hover:opacity-80"
+                              style={{
+                                background: "var(--accent-soft)",
+                                border: "1px solid var(--accent-border)",
+                                color: "var(--accent-light)",
+                              }}
+                              title={`Note by ${article._noteAuthor || 'You'}`}
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                              </svg>
+                              <span className="truncate max-w-[120px]">{article._note}</span>
+                            </button>
+                          )}
                         </div>
-                      )}
-                      {/* Note */}
-                      {article._note && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setArticleNotePopup(article.id); }}
-                          className="mt-1 w-full text-left flex items-start gap-2 p-2 rounded-lg border transition-all hover:opacity-80"
-                          style={{
-                            background: "var(--accent-soft)",
-                            borderColor: "var(--accent-border)",
-                          }}
-                        >
-                          <svg className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: "var(--accent)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                          </svg>
-                          <div className="flex-1 min-w-0">
-                            <span className="text-xs font-semibold" style={{ color: "var(--accent-light)" }}>
-                              {article._noteAuthor || 'You'}
-                            </span>
-                            <p className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>
-                              {article._note}
-                            </p>
-                          </div>
-                        </button>
-                      )}
-                      {/* Legacy screening notes — now unified with _note via fetch mapping */}
+                      ) : null}
                     </td>
                     <td className="px-4 py-3 text-xs text-[var(--text-secondary)] align-top tabular-nums">{new Date(article.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
                     <td className="px-4 py-3 text-xs text-[var(--text-secondary)] align-top truncate" title={article.authors}>{article.authors || "—"}</td>
@@ -1071,7 +1011,7 @@ export default function ReviewDataPage() {
 
         {/* ActionBar — replaces footer, includes pagination */}
         {(() => {
-          const effectiveIds = showDuplicatesInTable
+          const effectiveIds = activeTab === 'duplicates'
             ? selectedDuplicateIds.length > 0
               ? selectedDuplicateIds
               : activeDuplicateArticleId !== null
@@ -1092,7 +1032,7 @@ export default function ReviewDataPage() {
                 // Add to global label list if it's a new custom label
                 setGlobalLabels(prev => prev.includes(label) ? prev : [...prev, label]);
 
-                if (showDuplicatesInTable) {
+                if (activeTab === 'duplicates') {
                   // Use checkbox selection (duplicateIds) for bulk, or the specific clicked articleId for single
                   if (selectedDuplicateIds.length > 0) {
                     duplicateTableRef.current?.applyLabelToSelected(selectedDuplicateIds, label);
@@ -1154,7 +1094,7 @@ export default function ReviewDataPage() {
               onAddNote={async (note) => {
                 const user = api.getStoredUser();
                 const userName = user?.name || 'You';
-                if (showDuplicatesInTable) {
+                if (activeTab === 'duplicates') {
                   if (selectedDuplicateIds.length > 0) {
                     // Bulk — apply note to all selected pairs' rows
                     duplicateTableRef.current?.applyNoteToSelected(selectedDuplicateIds, note, userName);
@@ -1214,128 +1154,13 @@ export default function ReviewDataPage() {
             </button>
           </div>
 
-          {/* Single scroll area */}
-          <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-
-            {/* Include */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-green-500 rounded-md flex items-center justify-center shrink-0">
-                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                  </div>
-                  <span className="text-xs font-semibold text-[var(--text-primary)]">Keywords for include</span>
-                </div>
-                <button
-                  onClick={() => setShowIncludeInput(!showIncludeInput)}
-                  className="w-5 h-5 bg-green-500 hover:bg-green-600 rounded-md flex items-center justify-center transition-colors shrink-0"
-                >
-                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={showIncludeInput ? "M20 12H4" : "M12 4v16m8-8H4"} />
-                  </svg>
-                </button>
-              </div>
-
-              {showIncludeInput && (
-                <div className="mb-2 flex gap-1.5">
-                  <input
-                    type="text"
-                    placeholder="comma, separated…"
-                    value={customIncludeKeyword}
-                    onChange={(e) => setCustomIncludeKeyword(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { addCustomIncludeKeyword(); setShowIncludeInput(false); } }}
-                    autoFocus
-                    className="flex-1 text-xs bg-white dark:bg-[var(--surface-1)] border-2 border-green-400 text-[var(--text-primary)] placeholder-[var(--text-muted)] rounded-lg px-2 py-1.5 focus:outline-none"
-                  />
-                  <button onClick={() => { addCustomIncludeKeyword(); setShowIncludeInput(false); }} className="px-2 py-1.5 bg-green-500 text-white rounded-lg text-xs font-semibold hover:bg-green-600 transition-colors shrink-0">Add</button>
-                </div>
-              )}
-
-              {includeKeywords.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {includeKeywords.map(kw => (
-                    <span key={kw} className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-950/60 text-green-700 dark:text-green-400 rounded-md text-xs font-medium">
-                      {kw}
-                      <button onClick={() => removeIncludeKeyword(kw)}><svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <div className="space-y-0.5">
-                {keywords.slice(0, 10).map(({ word, count }) => (
-                  <label key={word} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-[var(--surface-2)] cursor-pointer transition-colors">
-                    <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={includeKeywords.includes(word)} onChange={() => toggleIncludeKeyword(word)} className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 accent-green-500" />
-                      <span className="text-xs text-[var(--text-secondary)]">{word}</span>
-                    </div>
-                    <span className="text-xs text-[var(--text-muted)] font-semibold tabular-nums">{count}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="border-t border-[var(--border-subtle)]" />
-
-            {/* Exclude */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-red-500 rounded-md flex items-center justify-center shrink-0">
-                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </div>
-                  <span className="text-xs font-semibold text-[var(--text-primary)]">Keywords for exclude</span>
-                </div>
-                <button
-                  onClick={() => setShowExcludeInput(!showExcludeInput)}
-                  className="w-5 h-5 bg-red-500 hover:bg-red-600 rounded-md flex items-center justify-center transition-colors shrink-0"
-                >
-                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={showExcludeInput ? "M20 12H4" : "M12 4v16m8-8H4"} />
-                  </svg>
-                </button>
-              </div>
-
-              {showExcludeInput && (
-                <div className="mb-2 flex gap-1.5">
-                  <input
-                    type="text"
-                    placeholder="comma, separated…"
-                    value={customExcludeKeyword}
-                    onChange={(e) => setCustomExcludeKeyword(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { addCustomExcludeKeyword(); setShowExcludeInput(false); } }}
-                    autoFocus
-                    className="flex-1 text-xs bg-white dark:bg-[var(--surface-1)] border-2 border-red-400 text-[var(--text-primary)] placeholder-[var(--text-muted)] rounded-lg px-2 py-1.5 focus:outline-none"
-                  />
-                  <button onClick={() => { addCustomExcludeKeyword(); setShowExcludeInput(false); }} className="px-2 py-1.5 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors shrink-0">Add</button>
-                </div>
-              )}
-
-              {excludeKeywords.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {excludeKeywords.map(kw => (
-                    <span key={kw} className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-400 rounded-md text-xs font-medium">
-                      {kw}
-                      <button onClick={() => removeExcludeKeyword(kw)}><svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <div className="space-y-0.5">
-                {keywords.slice(0, 10).map(({ word, count }) => (
-                  <label key={word} className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-[var(--surface-2)] cursor-pointer transition-colors">
-                    <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={excludeKeywords.includes(word)} onChange={() => toggleExcludeKeyword(word)} className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 accent-red-500" />
-                      <span className="text-xs text-[var(--text-secondary)]">{word}</span>
-                    </div>
-                    <span className="text-xs text-[var(--text-muted)] font-semibold tabular-nums">{count}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-          </div>
+          <FilterBar
+            includeKeywords={includeKeywords}
+            excludeKeywords={excludeKeywords}
+            onIncludeKeywordsChange={setIncludeKeywords}
+            onExcludeKeywordsChange={setExcludeKeywords}
+            articles={articles}
+          />
         </aside>
       )}
 
@@ -1566,6 +1391,7 @@ export default function ReviewDataPage() {
           pair={duplicateResolveQueue[duplicateResolveIndex] || null}
           index={duplicateResolveIndex}
           total={duplicateResolveQueue.length}
+          totalInDb={duplicateCounts.unresolved}
           isResolving={manualDuplicateResolvingId !== null}
           onClose={() => {
             setShowManualDuplicateResolve(false);

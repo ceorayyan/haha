@@ -245,41 +245,67 @@ const DuplicateTable = forwardRef<DuplicateTableHandle, DuplicateTableProps>(
           allPairsOrderRef.current.push(dup.id);
         }
 
-        // Add article 1 — include labels and notes persisted on the article
-        flattenedArticles.push({
-          articleId: dup.article1_id,
-          title: dup.article1_title,
-          authors: dup.article1_authors || '',
-          createdAt: dup.article1_created_at,
-          duplicateId: dup.id,
-          duplicateArticleId: dup.article2_id,
-          duplicateTitle: dup.article2_title,
-          duplicateAuthors: dup.article2_authors || '',
-          duplicateCreatedAt: dup.article2_created_at,
-          similarityScore: dup.similarity_score,
-          detectionReason: dup.detection_reason,
-          notes: dup.article1_screening_notes || undefined,
-          labels: dup.article1_labels && dup.article1_labels.length > 0 ? dup.article1_labels : [],
-          noteAuthor: undefined,
-        });
+        // For the "deleted" and "resolved" tabs, only show the loser article as the primary row.
+        // For all other tabs, show both articles so labels/notes are visible on each.
+        const isDeletedOrResolvedTab = statusFilter === 'deleted' || statusFilter === 'resolved';
+        const loserId = dup.loser_article_id ?? null;
 
-        // Add article 2 — so its labels/notes are also visible in the table
-        flattenedArticles.push({
-          articleId: dup.article2_id,
-          title: dup.article2_title,
-          authors: dup.article2_authors || '',
-          createdAt: dup.article2_created_at,
-          duplicateId: dup.id,
-          duplicateArticleId: dup.article1_id,
-          duplicateTitle: dup.article1_title,
-          duplicateAuthors: dup.article1_authors || '',
-          duplicateCreatedAt: dup.article1_created_at,
-          similarityScore: dup.similarity_score,
-          detectionReason: dup.detection_reason,
-          notes: dup.article2_screening_notes || undefined,
-          labels: dup.article2_labels && dup.article2_labels.length > 0 ? dup.article2_labels : [],
-          noteAuthor: undefined,
-        });
+        if (isDeletedOrResolvedTab) {
+          // Only push the loser article row
+          const loserIsArticle1 = loserId === dup.article1_id;
+          flattenedArticles.push({
+            articleId: loserIsArticle1 ? dup.article1_id : dup.article2_id,
+            title: loserIsArticle1 ? dup.article1_title : dup.article2_title,
+            authors: loserIsArticle1 ? (dup.article1_authors || '') : (dup.article2_authors || ''),
+            createdAt: loserIsArticle1 ? dup.article1_created_at : dup.article2_created_at,
+            duplicateId: dup.id,
+            duplicateArticleId: loserIsArticle1 ? dup.article2_id : dup.article1_id,
+            duplicateTitle: loserIsArticle1 ? dup.article2_title : dup.article1_title,
+            duplicateAuthors: loserIsArticle1 ? (dup.article2_authors || '') : (dup.article1_authors || ''),
+            duplicateCreatedAt: loserIsArticle1 ? dup.article2_created_at : dup.article1_created_at,
+            similarityScore: dup.similarity_score,
+            detectionReason: dup.detection_reason,
+            notes: loserIsArticle1 ? (dup.article1_screening_notes || undefined) : (dup.article2_screening_notes || undefined),
+            labels: loserIsArticle1
+              ? (dup.article1_labels?.length ? dup.article1_labels : [])
+              : (dup.article2_labels?.length ? dup.article2_labels : []),
+            noteAuthor: undefined,
+          });
+        } else {
+          // Show both articles so labels/notes are visible on each row
+          flattenedArticles.push({
+            articleId: dup.article1_id,
+            title: dup.article1_title,
+            authors: dup.article1_authors || '',
+            createdAt: dup.article1_created_at,
+            duplicateId: dup.id,
+            duplicateArticleId: dup.article2_id,
+            duplicateTitle: dup.article2_title,
+            duplicateAuthors: dup.article2_authors || '',
+            duplicateCreatedAt: dup.article2_created_at,
+            similarityScore: dup.similarity_score,
+            detectionReason: dup.detection_reason,
+            notes: dup.article1_screening_notes || undefined,
+            labels: dup.article1_labels?.length ? dup.article1_labels : [],
+            noteAuthor: undefined,
+          });
+          flattenedArticles.push({
+            articleId: dup.article2_id,
+            title: dup.article2_title,
+            authors: dup.article2_authors || '',
+            createdAt: dup.article2_created_at,
+            duplicateId: dup.id,
+            duplicateArticleId: dup.article1_id,
+            duplicateTitle: dup.article1_title,
+            duplicateAuthors: dup.article1_authors || '',
+            duplicateCreatedAt: dup.article1_created_at,
+            similarityScore: dup.similarity_score,
+            detectionReason: dup.detection_reason,
+            notes: dup.article2_screening_notes || undefined,
+            labels: dup.article2_labels?.length ? dup.article2_labels : [],
+            noteAuthor: undefined,
+          });
+        }
       });
 
       if (reset) {

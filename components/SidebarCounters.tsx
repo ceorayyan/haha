@@ -105,7 +105,7 @@ export default function SidebarCounters({ counts, activeStatus, onStatusClick }:
         style={{ borderColor: "var(--border-subtle)" }}
       >
         <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
-          Total
+          Total Pairs
         </span>
         <span className="text-xs font-bold" style={{ color: "var(--accent)" }}>
           {counts.total}
