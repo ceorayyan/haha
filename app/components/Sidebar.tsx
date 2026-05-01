@@ -91,23 +91,19 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full w-56 bg-white dark:bg-black border-r border-gray-200 dark:border-gray-800 z-50 transform transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 left-0 h-full w-56 bg-white dark:bg-[#111] border-r border-gray-100 dark:border-gray-800 z-50 transform transition-transform duration-300 ease-in-out ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-200 dark:border-gray-800">
+          <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100 dark:border-gray-800">
             <div className="flex items-center gap-2">
               {branding?.logoUrl ? (
-                <img
-                  src={branding.logoUrl}
-                  alt="Logo"
-                  className="w-7 h-7 object-contain rounded-lg"
-                />
+                <img src={branding.logoUrl} alt="Logo" className="w-7 h-7 object-contain rounded-lg" />
               ) : (
-                <div className="w-7 h-7 bg-black dark:bg-white rounded-lg flex items-center justify-center">
-                  <span className="text-white dark:text-black font-bold text-xs">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#1a5f7a" }}>
+                  <span className="text-white font-bold text-xs">
                     {branding ? getLogoInitial(branding.websiteName) : "S"}
                   </span>
                 </div>
@@ -120,14 +116,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               onClick={onClose}
               className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
             >
-              <svg className="w-4 h-4 text-gray-900 dark:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 p-2 space-y-1">
+          <nav className="flex-1 p-2 space-y-0.5">
             {menuItems.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
               return (
@@ -135,11 +131,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   key={item.id}
                   href={item.href}
                   onClick={onClose}
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-black dark:bg-white text-white dark:text-black"
-                      : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  }`}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                  style={isActive ? {
+                    background: "#1a5f7a",
+                    color: "#fff",
+                  } : {
+                    color: "var(--text-secondary, #475569)",
+                  }}
                 >
                   {item.icon}
                   <span>{item.label}</span>
@@ -149,18 +147,18 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           </nav>
 
           {/* Footer */}
-          <div className="p-3 border-t border-gray-200 dark:border-gray-800 space-y-2">
+          <div className="p-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
             <button
               onClick={handleLogout}
               disabled={loggingOut}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition-colors disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-50"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
               <span>{loggingOut ? "Logging out..." : "Logout"}</span>
             </button>
-            <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
+            <div className="text-xs text-gray-400 dark:text-gray-500 text-center">
               {branding?.websiteName || "StataNexus.Ai"} v1.0.0
             </div>
           </div>

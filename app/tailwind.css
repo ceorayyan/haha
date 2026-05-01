@@ -1,3 +1,10 @@
 @import "tailwindcss";
 
 @variant dark (&:is(.dark *));
+
+@theme {
+  --font-bodoni: var(--font-bodoni), "Bodoni Moda", Georgia, serif;
+  --font-sans: var(--font-bodoni), "Bodoni Moda", Georgia, serif;
+  --font-serif: var(--font-bodoni), "Bodoni Moda", Georgia, serif;
+  --font-mono: var(--font-bodoni), "Bodoni Moda", Georgia, serif;
+}

@@ -32,6 +32,7 @@ export default function ScreeningPage() {
   const currentUserName = api.getStoredUser()?.name || "You";
 
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [articles, setArticles] = useState<Article[]>([]);
   const [includeKeywords, setIncludeKeywords] = useState<string[]>([]);
   const [excludeKeywords, setExcludeKeywords] = useState<string[]>([]);
@@ -133,7 +134,13 @@ export default function ScreeningPage() {
 
   useEffect(() => {
     const fetchArticles = async () => {
-      setLoading(true);
+      // Only show main loading on first page
+      if (currentPage === 1) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+      
       try {
         const res = await api.getArticles(reviewId, currentPage, 100);
         const arr = Array.isArray(res) ? res : res?.data || [];
@@ -168,9 +175,12 @@ export default function ScreeningPage() {
         setTotalArticles(res?.total || arr.length);
       } catch (e: any) {
         toast.error(e?.message || "Failed to load articles");
-        setArticles([]);
+        if (currentPage === 1) {
+          setArticles([]);
+        }
       } finally {
         setLoading(false);
+        setLoadingMore(false);
       }
     };
     fetchArticles();
@@ -181,7 +191,12 @@ export default function ScreeningPage() {
     const fetchStats = async () => {
       try {
         const stats = await api.getScreeningStats(reviewId);
-        setScreeningStats(stats);
+        setScreeningStats({
+          total: stats.total ?? 0,
+          undecided: stats.undecided ?? stats.unscreened ?? (stats.total - (stats.screened ?? 0)) ?? 0,
+          included: stats.included ?? 0,
+          excluded: stats.excluded ?? 0,
+        });
       } catch (e: any) {
         console.error("Failed to fetch screening stats:", e);
       }
@@ -247,28 +262,43 @@ export default function ScreeningPage() {
 
   // Infinite scroll observer for sidebar article list
   const sidebarObserverTarget = useRef<HTMLDivElement>(null);
+  const isLoadingRef = useRef(false);
   
   useEffect(() => {
+    if (!sidebarObserverTarget.current) return;
+    
     const observer = new IntersectionObserver(
       entries => {
-        if (entries[0].isIntersecting && hasMore && !loading) {
+        const entry = entries[0];
+        // Only trigger if:
+        // 1. Element is intersecting
+        // 2. There are more pages to load
+        // 3. Not currently loading
+        // 4. Not already triggered (using ref to prevent double-triggers)
+        if (entry.isIntersecting && hasMore && !loading && !loadingMore && !isLoadingRef.current) {
+          isLoadingRef.current = true;
           setCurrentPage(prev => prev + 1);
+          // Reset the ref after a short delay to allow the next trigger
+          setTimeout(() => {
+            isLoadingRef.current = false;
+          }, 1000);
         }
       },
-      { threshold: 0.1 }
+      { 
+        threshold: 0.1,
+        rootMargin: '100px' // Start loading 100px before reaching the target
+      }
     );
 
     const currentTarget = sidebarObserverTarget.current;
-    if (currentTarget) {
-      observer.observe(currentTarget);
-    }
+    observer.observe(currentTarget);
 
     return () => {
       if (currentTarget) {
         observer.unobserve(currentTarget);
       }
     };
-  }, [hasMore, loading]);
+  }, [hasMore, loading, loadingMore]);
 
   const currentArticle = filteredArticles[currentIndex] || null;
 
@@ -536,7 +566,7 @@ export default function ScreeningPage() {
                               }`}
                             >
                               <div className="flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#1a5f7a" }} />
                                 <span className="text-xs text-[var(--text-secondary)]">All Articles</span>
                               </div>
                               <span className="text-xs font-semibold tabular-nums text-[var(--text-muted)]">
@@ -551,8 +581,16 @@ export default function ScreeningPage() {
                 </div>
 
                 {loading ? (
-                  <div className="p-4 text-xs text-center" style={{ color: "var(--text-muted)" }}>
-                    Loading…
+                  <div className="p-4">
+                    {/* Skeleton loading rows */}
+                    {Array.from({ length: 3 }).map((_, idx) => (
+                      <div key={`skeleton-${idx}`} className="animate-pulse px-3 py-2 rounded-lg border border-transparent mb-2">
+                        <div className="flex flex-col gap-1.5">
+                          <div className="h-3 bg-[var(--surface-2)] rounded w-3/4" />
+                          <div className="h-2.5 bg-[var(--surface-2)] rounded w-1/2" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : filteredArticles.length === 0 ? (
                   <div className="p-4 text-xs text-center" style={{ color: "var(--text-muted)" }}>
@@ -587,12 +625,15 @@ export default function ScreeningPage() {
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {/* Decision Icon + Username */}
                             {a.screening_decision && a.screening_decision !== "undecided" && a.screening_decision_by ? (
-                              <button
+                              <span
+                                role="button"
+                                tabIndex={0}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setArticleDecisionPopup(a.id);
                                 }}
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all hover:opacity-80"
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setArticleDecisionPopup(a.id); } }}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold cursor-pointer hover:opacity-80"
                                 style={{
                                   background: a.screening_decision === "included" ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
                                   color: a.screening_decision === "included" ? "rgba(34,197,94,0.95)" : "rgba(239,68,68,0.95)",
@@ -609,14 +650,17 @@ export default function ScreeningPage() {
                                   </svg>
                                 )}
                                 <span>{a.screening_decision_by}</span>
-                              </button>
+                              </span>
                             ) : a.screening_decision === "undecided" && a.screening_decision_by ? (
-                              <button
+                              <span
+                                role="button"
+                                tabIndex={0}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setArticleDecisionPopup(a.id);
                                 }}
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all hover:opacity-80"
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setArticleDecisionPopup(a.id); } }}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold cursor-pointer hover:opacity-80"
                                 style={{
                                   background: "rgba(245,158,11,0.14)",
                                   color: "rgba(245,158,11,0.95)",
@@ -625,7 +669,7 @@ export default function ScreeningPage() {
                               >
                                 <span className="text-xs font-bold leading-none">?</span>
                                 <span>{a.screening_decision_by}</span>
-                              </button>
+                              </span>
                             ) : null}
                             
                             {/* Exclusion Reasons */}
@@ -645,10 +689,13 @@ export default function ScreeningPage() {
                             
                             {/* Labels */}
                             {a._labels && a._labels.length > 0 && a._labels.map((label, i) => (
-                              <button
+                              <span
                                 key={i}
+                                role="button"
+                                tabIndex={0}
                                 onClick={(e) => { e.stopPropagation(); setArticleLabelPopup(a.id); }}
-                                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all hover:opacity-80"
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setArticleLabelPopup(a.id); } }}
+                                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold cursor-pointer hover:opacity-80"
                                 style={{
                                   background: "var(--accent-soft)",
                                   border: "1px solid var(--accent-border)",
@@ -657,14 +704,17 @@ export default function ScreeningPage() {
                                 title={`Label: ${label}`}
                               >
                                 {label}
-                              </button>
+                              </span>
                             ))}
                             
                             {/* Note Icon */}
                             {a._note && (
-                              <button
+                              <span
+                                role="button"
+                                tabIndex={0}
                                 onClick={(e) => { e.stopPropagation(); setArticleNotePopup(a.id); }}
-                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all hover:opacity-80"
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setArticleNotePopup(a.id); } }}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold cursor-pointer hover:opacity-80"
                                 style={{
                                   background: "var(--accent-soft)",
                                   border: "1px solid var(--accent-border)",
@@ -676,28 +726,29 @@ export default function ScreeningPage() {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
                                 </svg>
                                 <span>1</span>
-                              </button>
+                              </span>
                             )}
                           </div>
                         </div>
                       </button>
                     ))}
                     
-                    {/* Skeleton loading rows */}
-                    {loading && Array.from({ length: 3 }).map((_, idx) => (
-                      <div key={`skeleton-${idx}`} className="animate-pulse px-3 py-2 rounded-lg border border-transparent">
-                        <div className="flex items-start gap-2">
-                          <div className="w-4 h-4 bg-[var(--surface-2)] rounded mt-1 shrink-0" />
-                          <div className="flex-1 space-y-1.5">
-                            <div className="h-3 bg-[var(--surface-2)] rounded w-3/4" />
-                            <div className="h-2.5 bg-[var(--surface-2)] rounded w-1/2" />
+                    {/* Loading more indicator */}
+                    {loadingMore && (
+                      <div className="px-3 py-2 space-y-2">
+                        {Array.from({ length: 2 }).map((_, idx) => (
+                          <div key={`loading-${idx}`} className="animate-pulse px-3 py-2 rounded-lg border border-transparent">
+                            <div className="flex flex-col gap-1.5">
+                              <div className="h-3 bg-[var(--surface-2)] rounded w-3/4" />
+                              <div className="h-2.5 bg-[var(--surface-2)] rounded w-1/2" />
+                            </div>
                           </div>
-                        </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                     
                     {/* Infinite scroll observer target */}
-                    {!loading && hasMore && (
+                    {!loading && !loadingMore && hasMore && (
                       <div ref={sidebarObserverTarget} className="h-4" />
                     )}
                   </div>
@@ -749,6 +800,76 @@ export default function ScreeningPage() {
           {/* Bottom Action Bar */}
           <div className="border-t border-[var(--border-subtle)] bg-[var(--surface-1)] shrink-0">
             <div className="px-6 py-3 flex items-center justify-center gap-2 relative">
+              {/* Include button - icon only */}
+              <button
+                onClick={handleInclude}
+                disabled={!currentArticle}
+                className="w-10 h-10 flex items-center justify-center rounded-lg disabled:opacity-50 transition-colors"
+                style={{ background: "rgba(34,197,94,0.12)", color: "rgba(34,197,94,0.95)" }}
+                title="Include"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              </button>
+
+              {/* Confused button - icon only */}
+              <button
+                onClick={handleMaybe}
+                disabled={!currentArticle}
+                className="w-10 h-10 flex items-center justify-center rounded-lg disabled:opacity-50 transition-colors text-lg font-bold"
+                style={{ background: "rgba(245,158,11,0.14)", color: "rgba(245,158,11,0.95)" }}
+                title="Confused"
+              >
+                ?
+              </button>
+
+              {/* Exclude button - icon only */}
+              <button
+                onClick={handleExclude}
+                disabled={!currentArticle}
+                className="w-10 h-10 flex items-center justify-center rounded-lg disabled:opacity-50 transition-colors"
+                style={{ background: "rgba(239,68,68,0.12)", color: "rgba(239,68,68,0.95)" }}
+                title="Exclude"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              <div className="w-px h-8 bg-[var(--border-subtle)]" />
+
+              <input
+                disabled={!currentArticle}
+                placeholder="Add note…"
+                className="w-[280px] max-w-full px-3 py-2 rounded-lg text-sm border disabled:opacity-50 transition-colors"
+                style={{
+                  background: "var(--surface-2)",
+                  borderColor: "var(--border-subtle)",
+                  color: "var(--text-primary)",
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const target = e.target as HTMLInputElement;
+                    const value = target.value.trim();
+                    if (value) {
+                      saveNote(value);
+                      target.value = "";
+                    }
+                  }
+                }}
+              />
+              <button
+                onClick={goNext}
+                disabled={!currentArticle}
+                className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors"
+                style={{ background: "var(--accent)", color: "white" }}
+              >
+                Next →
+              </button>
+
+              <div className="w-px h-8 bg-[var(--border-subtle)]" />
+
               {/* Label button + popup */}
               <div className="relative">
                 <button
@@ -965,76 +1086,6 @@ export default function ScreeningPage() {
                   </div>
                 )}
               </div>
-
-              <div className="w-px h-8 bg-[var(--border-subtle)]" />
-
-              {/* Include button - icon only */}
-              <button
-                onClick={handleInclude}
-                disabled={!currentArticle}
-                className="w-10 h-10 flex items-center justify-center rounded-lg disabled:opacity-50 transition-colors"
-                style={{ background: "rgba(34,197,94,0.12)", color: "rgba(34,197,94,0.95)" }}
-                title="Include"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
-              </button>
-
-              {/* Confused button - icon only */}
-              <button
-                onClick={handleMaybe}
-                disabled={!currentArticle}
-                className="w-10 h-10 flex items-center justify-center rounded-lg disabled:opacity-50 transition-colors text-lg font-bold"
-                style={{ background: "rgba(245,158,11,0.14)", color: "rgba(245,158,11,0.95)" }}
-                title="Confused"
-              >
-                ?
-              </button>
-
-              {/* Exclude button - icon only */}
-              <button
-                onClick={handleExclude}
-                disabled={!currentArticle}
-                className="w-10 h-10 flex items-center justify-center rounded-lg disabled:opacity-50 transition-colors"
-                style={{ background: "rgba(239,68,68,0.12)", color: "rgba(239,68,68,0.95)" }}
-                title="Exclude"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-
-              <div className="w-px h-8 bg-[var(--border-subtle)]" />
-
-              <input
-                disabled={!currentArticle}
-                placeholder="Add note…"
-                className="w-[280px] max-w-full px-3 py-2 rounded-lg text-sm border disabled:opacity-50 transition-colors"
-                style={{
-                  background: "var(--surface-2)",
-                  borderColor: "var(--border-subtle)",
-                  color: "var(--text-primary)",
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    const target = e.target as HTMLInputElement;
-                    const value = target.value.trim();
-                    if (value) {
-                      saveNote(value);
-                      target.value = "";
-                    }
-                  }
-                }}
-              />
-              <button
-                onClick={goNext}
-                disabled={!currentArticle}
-                className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors"
-                style={{ background: "var(--accent)", color: "white" }}
-              >
-                Next →
-              </button>
             </div>
           </div>
         </div>

@@ -9,8 +9,8 @@ import api from "../../lib/api";
 
 type ModalStep = 1 | 2 | 3;
 
-const inputCls = "w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 text-xs rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-gray-500";
-const selectCls = "w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-xs rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-gray-500";
+const inputCls = "w-full bg-white dark:bg-[#0d0d0d] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#1a5f7a] transition-colors";
+const selectCls = "w-full bg-white dark:bg-[#0d0d0d] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#1a5f7a] transition-colors";
 
 function StepIndicator({ step }: { step: ModalStep }) {
   const steps = [
@@ -245,95 +245,158 @@ export default function ReviewsPage() {
 
   // Skeleton loader component
   const SkeletonRow = () => (
-    <tr className="animate-pulse">
-      <td className="px-6 py-4">
+    <tr className="animate-pulse border-b border-gray-100 dark:border-gray-800">
+      <td className="px-6 py-3.5">
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-48"></div>
+          <div className="w-3.5 h-3.5 bg-gray-200 dark:bg-gray-700 rounded shrink-0"></div>
+          <div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-48"></div>
         </div>
       </td>
-      <td className="px-6 py-4">
-        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
-      </td>
-      <td className="px-6 py-4">
-        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
-      </td>
-      <td className="px-6 py-4">
-        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-12"></div>
-      </td>
-      <td className="px-6 py-4">
-        <div className="w-4 h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
-      </td>
+      <td className="px-6 py-3.5"><div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-24"></div></td>
+      <td className="px-6 py-3.5"><div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-28"></div></td>
+      <td className="px-6 py-3.5"><div className="h-3.5 bg-gray-200 dark:bg-gray-700 rounded w-10"></div></td>
+      <td className="px-6 py-3.5"><div className="w-3.5 h-3.5 bg-gray-200 dark:bg-gray-700 rounded"></div></td>
     </tr>
   );
 
   return (
     <ProtectedRoute>
-    <div className="flex h-screen bg-gray-50 dark:bg-black">
+    <div className="flex h-screen bg-gray-50 dark:bg-[#0a0a0a]">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <Header onMenuClick={() => setSidebarOpen(true)} title="Active Reviews" />
+        <Header onMenuClick={() => setSidebarOpen(true)} title="Reviews" />
 
-        {/* Main */}
-        <main className="flex-1 overflow-auto p-6">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-between mb-6">
+        <main className="flex-1 overflow-auto">
+          <div className="max-w-6xl mx-auto px-6 py-6">
+
+            {/* Page header */}
+            <div className="flex items-center justify-between mb-5">
               <div>
-                <h1 className="text-xl font-semibold text-gray-900 dark:text-white mb-1">Reviews</h1>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Showing {reviews.length} active reviews</p>
+                <h1 className="text-lg font-semibold text-gray-900 dark:text-white">My Reviews</h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {loading ? "Loading…" : `${reviews.length} review${reviews.length !== 1 ? "s" : ""}`}
+                </p>
               </div>
-              <button onClick={() => setShowModal(true)} className="bg-black dark:bg-white text-white dark:text-black text-sm px-4 py-2 rounded-lg font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors">
-                + Create Review
+              <button
+                onClick={() => setShowModal(true)}
+                className="flex items-center gap-1.5 text-white text-sm px-4 py-2 rounded-lg font-medium transition-colors shadow-sm"
+                style={{ background: "#1a5f7a" }}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                New Review
               </button>
             </div>
 
-            <div className="bg-white dark:bg-black rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
+            {/* Table */}
+            <div className="bg-white dark:bg-[#111] rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
               <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-black border-b border-gray-200 dark:border-gray-700">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Title</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Date Created</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Owner</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Articles</th>
-                    <th className="px-6 py-3 w-12"></th>
+                <thead>
+                  <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-[#0d0d0d]">
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Title</th>
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</th>
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Owner</th>
+                    <th className="px-6 py-3 text-left text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Articles</th>
+                    <th className="px-6 py-3 w-10"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                <tbody>
                   {loading ? (
-                    <>
-                      <SkeletonRow />
-                      <SkeletonRow />
-                      <SkeletonRow />
-                      <SkeletonRow />
-                      <SkeletonRow />
-                    </>
-                  ) : reviews.map((review) => (
-                    <tr key={review.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                      <td className="px-6 py-4">
-                        <Link href={`/reviews/${review.id}/overview`} className="flex items-center gap-2 text-gray-900 dark:text-gray-100 hover:text-black dark:hover:text-white text-sm font-medium transition-colors">
-                          <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                          {review.title}
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{formatDate(review.created_at)}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{review.user?.name || "N/A"}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{review.articles_count || 0}</td>
-                      <td className="px-6 py-4 relative">
-                        <button onClick={() => setOpenMenuId(openMenuId === review.id ? null : review.id)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors">
-                          <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" /></svg>
-                        </button>
-                        {openMenuId === review.id && (
-                          <>
-                            <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
-                            <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-20">
-                              <button onClick={() => { if (confirm("Delete this review?")) { deleteReview(review.id); setOpenMenuId(null); } }} className="w-full px-4 py-2.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors">Delete Review</button>
-                            </div>
-                          </>
-                        )}
+                    Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)
+                  ) : reviews.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-16 text-center">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "rgba(26,95,122,0.08)" }}>
+                            <svg className="w-6 h-6" style={{ color: "#1a5f7a" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">No reviews yet</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Create your first review to get started</p>
+                          </div>
+                          <button
+                            onClick={() => setShowModal(true)}
+                            className="mt-1 text-xs font-medium transition-colors hover:opacity-80"
+                            style={{ color: "#1a5f7a" }}
+                          >
+                            + Create Review
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    reviews.map((review) => (
+                      <tr key={review.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors group">
+                        <td className="px-6 py-3.5">
+                          <Link
+                            href={`/reviews/${review.id}/overview`}
+                            className="flex items-center gap-2.5 text-sm font-medium text-gray-900 dark:text-gray-100 transition-colors hover:opacity-80"
+                          >
+                            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "rgba(26,95,122,0.1)" }}>
+                              <svg className="w-3.5 h-3.5" style={{ color: "#1a5f7a" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                            </div>
+                            {review.title}
+                          </Link>
+                        </td>
+                        <td className="px-6 py-3.5 text-xs text-gray-500 dark:text-gray-400">{formatDate(review.created_at)}</td>
+                        <td className="px-6 py-3.5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ background: "#1a5f7a" }}>
+                              <span className="text-[9px] font-bold text-white">
+                                {(review.user?.name || "?").charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <span className="text-xs text-gray-600 dark:text-gray-400">{review.user?.name || "N/A"}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-3.5">
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300">
+                            <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            {(review.articles ?? review.articles_count ?? 0).toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3.5 relative">
+                          <button
+                            onClick={() => setOpenMenuId(openMenuId === review.id ? null : review.id)}
+                            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                          >
+                            <svg className="w-3.5 h-3.5 text-gray-500" fill="currentColor" viewBox="0 0 24 24">
+                              <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+                            </svg>
+                          </button>
+                          {openMenuId === review.id && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                              <div className="absolute right-2 mt-1 w-36 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-20 overflow-hidden">
+                                <Link
+                                  href={`/reviews/${review.id}/overview`}
+                                  className="flex items-center gap-2 w-full px-3 py-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                  onClick={() => setOpenMenuId(null)}
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                  Open
+                                </Link>
+                                <button
+                                  onClick={() => { if (confirm("Delete this review? This cannot be undone.")) { deleteReview(review.id); setOpenMenuId(null); } }}
+                                  className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                  Delete
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -343,31 +406,81 @@ export default function ReviewsPage() {
 
       {/* Create Review Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-black rounded-lg w-full max-w-2xl shadow-xl">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-[#111] rounded-2xl w-full max-w-xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-800">
-              <div className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                <span className="text-sm font-semibold text-gray-800 dark:text-white">Create New Review</span>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#1a5f7a" }}>
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Create New Review</h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Step {step} of 3</p>
+                </div>
               </div>
-              <button onClick={resetModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              <button onClick={resetModal} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
-            <StepIndicator step={step} />
+            {/* Step indicator */}
+            <div className="px-6 pt-4 pb-2">
+              <div className="flex items-center gap-2">
+                {[
+                  { n: 1, label: "Review Info" },
+                  { n: 2, label: "Upload Articles" },
+                  { n: 3, label: "Invite Members" },
+                ].map((s, i) => (
+                  <div key={s.n} className="flex items-center gap-2 flex-1">
+                    <div className={`flex items-center gap-1.5 ${i > 0 ? "flex-1" : ""}`}>
+                      {i > 0 && (
+                        <div className="flex-1 h-px" style={{ background: step > s.n - 1 ? "#2dd4a0" : "#e5e7eb" }} />
+                      )}
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+                        style={
+                          step === s.n ? { background: "#1a5f7a", color: "#fff" } :
+                          step > s.n ? { background: "rgba(45,212,160,0.18)", color: "#1a5f7a" } :
+                          { background: "#f3f4f6", color: "#9ca3af" }
+                        }
+                      >
+                        {step > s.n ? "✓" : s.n}
+                      </div>
+                    </div>
+                    <span className={`text-[11px] font-medium whitespace-nowrap ${step === s.n ? "text-gray-900 dark:text-white" : "text-gray-400"}`}>
+                      {s.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             {/* Step 1 */}
             {step === 1 && (
-              <div className="p-5 space-y-3">
+              <div className="px-6 py-4 space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Review Title <span className="text-red-500">*</span></label>
-                  <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="Review title has to be unique" className={inputCls} />
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                    Review Title <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={form.title}
+                    onChange={e => setForm({...form, title: e.target.value})}
+                    placeholder="e.g. Effects of Exercise on Mental Health"
+                    className={inputCls}
+                    autoFocus
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Review Type <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                      Review Type <span className="text-red-500">*</span>
+                    </label>
                     <select value={form.type} onChange={e => setForm({...form, type: e.target.value})} className={selectCls}>
                       <option value="">Choose type</option>
                       <option>Systematic Review</option>
@@ -376,85 +489,154 @@ export default function ReviewsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Review Domain <span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                      Domain <span className="text-red-500">*</span>
+                    </label>
                     <select value={form.domain} onChange={e => setForm({...form, domain: e.target.value})} className={selectCls}>
                       <option value="">Choose domain</option>
                       <option>Biomedical</option>
                       <option>Psychology</option>
                       <option>Public Health</option>
+                      <option>Education</option>
+                      <option>Engineering</option>
+                      <option>Social Sciences</option>
+                      <option>Other</option>
                     </select>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Description</label>
-                  <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Describe your review" rows={3} className={inputCls + " resize-none"} />
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Description</label>
+                  <textarea
+                    value={form.description}
+                    onChange={e => setForm({...form, description: e.target.value})}
+                    placeholder="Brief description of your review objectives…"
+                    rows={3}
+                    className={inputCls + " resize-none"}
+                  />
                 </div>
               </div>
             )}
 
             {/* Step 2 */}
             {step === 2 && (
-              <div className="p-5 flex gap-4">
-                <div className="w-44 shrink-0">
-                  <p className="text-xs font-semibold text-gray-700 mb-2">Supported Formats</p>
-                  <p className="text-xs text-gray-500 mb-2">Visit <span className="text-orange-500 cursor-pointer">Help Center</span> to learn more</p>
-                  <ul className="text-xs text-gray-600 space-y-1">
-                    {["EndNote Export", "Refman/RIS", "CSV", "BibTeX", "PubMed XML", "New PubMed Format/.nbib", "Web of Science/CIW"].map(f => (
-                      <li key={f} className="flex items-center gap-1"><span className="w-1 h-1 bg-gray-400 rounded-full shrink-0" />{f}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="flex-1 border border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center text-center">
-                  <p className="text-xs font-semibold text-gray-700 mb-1">Select Files</p>
-                  <p className="text-xs text-gray-400 mb-3">Select up to 10 files...</p>
-                  <svg className="w-10 h-10 text-gray-500 dark:text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                  <p className="text-xs text-gray-600 mb-1">Select files to import</p>
-                  <p className="text-xs text-gray-400 mb-3">Import and manage your data set!</p>
-                  <button onClick={() => fileInputRef.current?.click()} className="bg-black dark:bg-white text-white dark:text-black text-xs px-4 py-1.5 rounded font-medium hover:bg-gray-800 dark:hover:bg-gray-200">Select Files</button>
-                  <input ref={fileInputRef} type="file" multiple accept=".csv,.ris,.bib,.xml,.nbib" onChange={e => { if (e.target.files) setSelectedFiles(Array.from(e.target.files).slice(0, 10)); }} className="hidden" />
-                  {selectedFiles.length > 0 && <p className="text-xs text-gray-500 mt-2">{selectedFiles.length} file(s) selected</p>}
+              <div className="px-6 py-4">
+                <div className="flex gap-4">
+                  <div className="w-40 shrink-0 bg-gray-50 dark:bg-gray-900 rounded-xl p-3">
+                    <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 mb-2">Supported Formats</p>
+                    <ul className="space-y-1">
+                      {["CSV", "RIS / Refman", "BibTeX", "PubMed XML", ".nbib", "Web of Science"].map(f => (
+                        <li key={f} className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                          <span className="w-1 h-1 rounded-full shrink-0" style={{ background: "#2dd4a0" }} />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div
+                    className="flex-1 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-colors hover:border-[#2dd4a0]"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center mb-3" style={{ background: "rgba(26,95,122,0.08)" }}>
+                      <svg className="w-5 h-5" style={{ color: "#1a5f7a" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {selectedFiles.length > 0 ? `${selectedFiles.length} file(s) selected` : "Drop files here or click to browse"}
+                    </p>
+                    <p className="text-xs text-gray-400">Up to 10 files, max 10MB each</p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept=".csv,.ris,.bib,.xml,.nbib"
+                      onChange={e => { if (e.target.files) setSelectedFiles(Array.from(e.target.files).slice(0, 10)); }}
+                      className="hidden"
+                    />
+                    {selectedFiles.length > 0 && (
+                      <div className="mt-3 w-full space-y-1">
+                        {selectedFiles.map((f, i) => (
+                          <div key={i} className="flex items-center gap-2 text-[11px] text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded-lg px-2 py-1">
+                            <svg className="w-3 h-3 shrink-0" style={{ color: "#2dd4a0" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span className="truncate">{f.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
 
             {/* Step 3 */}
             {step === 3 && (
-              <div className="p-5 space-y-3">
-                <p className="text-sm font-bold text-gray-800">Accelerate your work and Invite members to your review!</p>
-                <p className="text-xs text-gray-500">The <span className="text-red-500">*</span> symbol represents required fields.</p>
+              <div className="px-6 py-4 space-y-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Invite collaborators to work on this review together.
+                </p>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">User Email <span className="text-red-500">*</span></label>
-                  <input type="text" value={inviteEmails} onChange={e => setInviteEmails(e.target.value)} placeholder="Use comma, to add multiple emails" className={inputCls} />
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                    Email Addresses <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={inviteEmails}
+                    onChange={e => setInviteEmails(e.target.value)}
+                    placeholder="email@example.com, another@example.com"
+                    className={inputCls}
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">Separate multiple emails with commas</p>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">User Role <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                    Role <span className="text-red-500">*</span>
+                  </label>
                   <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className={selectCls}>
-                    <option value="">Select member role</option>
-                    <option>Reviewer</option>
-                    <option>Collaborator</option>
-                    <option>Observer</option>
+                    <option value="">Select role</option>
+                    <option value="reviewer">Reviewer</option>
+                    <option value="coordinator">Coordinator</option>
+                    <option value="observer">Observer</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Reason/Message</label>
-                  <textarea value={inviteMsg} onChange={e => setInviteMsg(e.target.value)} placeholder="Add a reason/message for the user invitation email" rows={3} className={inputCls + " resize-none"} />
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Message (optional)</label>
+                  <textarea
+                    value={inviteMsg}
+                    onChange={e => setInviteMsg(e.target.value)}
+                    placeholder="Add a personal message to the invitation…"
+                    rows={2}
+                    className={inputCls + " resize-none"}
+                  />
                 </div>
               </div>
             )}
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200">
-              {step === 1 ? (
-                <button onClick={resetModal} className="text-xs text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded">Cancel</button>
-              ) : (
-                <button onClick={handleSkip} disabled={uploading || inviting} className="text-xs text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded disabled:opacity-50">Skip</button>
-              )}
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-[#0d0d0d]">
+              <button
+                onClick={step === 1 ? resetModal : handleSkip}
+                disabled={uploading || inviting}
+                className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+              >
+                {step === 1 ? "Cancel" : "Skip"}
+              </button>
               <button
                 onClick={handleNext}
                 disabled={(step === 1 && (!form.title || !form.type || !form.domain)) || uploading || inviting}
-                className="bg-black dark:bg-white text-white dark:text-black text-xs px-4 py-1.5 rounded font-medium hover:bg-gray-800 dark:hover:bg-gray-200 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 text-white text-xs px-5 py-2 rounded-lg font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: "#1a5f7a" }}
               >
-                {uploading || inviting ? "Processing..." : step === 1 ? "Create & Continue" : step === 2 ? "Upload & Continue" : "Send Invites"}
+                {uploading || inviting ? (
+                  <>
+                    <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Processing…
+                  </>
+                ) : step === 1 ? "Create & Continue →" : step === 2 ? "Upload & Continue →" : "Send Invites"}
               </button>
             </div>
           </div>

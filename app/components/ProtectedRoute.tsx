@@ -15,10 +15,17 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
 
   if (!api.isAuthenticated()) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-black flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 dark:border-white mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+      <div className="min-h-screen bg-gray-50 dark:bg-black flex items-center justify-center p-8">
+        <div className="w-full max-w-4xl space-y-4">
+          {/* Skeleton header */}
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 dark:bg-gray-800 rounded w-1/3 mb-6"></div>
+            <div className="space-y-3">
+              <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-full"></div>
+              <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-5/6"></div>
+              <div className="h-4 bg-gray-200 dark:bg-gray-800 rounded w-4/6"></div>
+            </div>
+          </div>
         </div>
       </div>
     );

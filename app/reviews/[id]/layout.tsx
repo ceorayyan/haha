@@ -87,9 +87,20 @@ export default function ReviewDetailLayout({ children }: { children: React.React
         )}
 
         {/* Tab bar */}
-        <div className="bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 px-6 flex items-center gap-1 shrink-0">
+        <div className="bg-white dark:bg-[#111] border-b border-gray-100 dark:border-gray-800 px-6 flex items-center gap-1 shrink-0">
           {tabs.map(tab => (
-            <Link key={tab.id} href={tab.href} className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${currentTab === tab.id ? "border-black dark:border-white text-black dark:text-white" : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"}`}>
+            <Link
+              key={tab.id}
+              href={tab.href}
+              className="px-4 py-3 text-sm font-medium border-b-2 transition-colors"
+              style={currentTab === tab.id ? {
+                borderColor: "#1a5f7a",
+                color: "#1a5f7a",
+              } : {
+                borderColor: "transparent",
+                color: "#6b7280",
+              }}
+            >
               {tab.label}
             </Link>
           ))}

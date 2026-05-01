@@ -44,7 +44,24 @@ export default function LoginPage() {
   if (brandingLoading && !branding) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center px-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+        <div className="w-full max-w-md space-y-6 animate-pulse">
+          {/* Logo skeleton */}
+          <div className="flex justify-center">
+            <div className="h-16 w-32 bg-zinc-800 rounded"></div>
+          </div>
+          {/* Title skeleton */}
+          <div className="h-8 bg-zinc-800 rounded w-3/4 mx-auto"></div>
+          {/* Card skeleton */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
+            <div className="space-y-4">
+              <div className="h-6 bg-zinc-800 rounded w-1/2"></div>
+              <div className="h-4 bg-zinc-800 rounded w-3/4"></div>
+              <div className="h-10 bg-zinc-800 rounded"></div>
+              <div className="h-10 bg-zinc-800 rounded"></div>
+              <div className="h-10 bg-zinc-800 rounded"></div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

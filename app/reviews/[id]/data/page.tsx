@@ -1248,11 +1248,12 @@ export default function ReviewDataPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="text-sm font-bold text-[var(--text-primary)]">Detect Duplicates</h3>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 rounded-full text-xs font-semibold">
-                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: "rgba(26,95,122,0.12)", color: "#1a5f7a" }}>
+                      <div className="flex gap-1">
+                        <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "#1a5f7a", animationDelay: '0ms' }}></div>
+                        <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "#1a5f7a", animationDelay: '150ms' }}></div>
+                        <div className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: "#1a5f7a", animationDelay: '300ms' }}></div>
+                      </div>
                       In Progress
                     </span>
                   </div>
@@ -1549,7 +1550,7 @@ export default function ReviewDataPage() {
             <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Labels</h3>
-                <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5 flex items-center gap-1">
+                <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "#1a5f7a" }}>
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>

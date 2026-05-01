@@ -11,6 +11,15 @@ export default function OverviewPage() {
   const [review, setReview] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [members, setMembers] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    total: 0,
+    screened: 0,
+    included: 0,
+    excluded: 0,
+    maybe: 0,
+    fulltext: 0,
+    duplicates: 0
+  });
 
   const [editModal, setEditModal] = useState(false);
   const [inviteModal, setInviteModal] = useState(false);
@@ -28,6 +37,19 @@ export default function OverviewPage() {
         const membersData = await api.getTeamMembers(reviewId);
         const membersArray = Array.isArray(membersData) ? membersData : [];
         setMembers(membersArray);
+        
+        // Fetch statistics from the dedicated stats endpoint
+        const statsData = await api.getScreeningStats(reviewId);
+        
+        setStats({
+          total: statsData.total || 0,
+          screened: statsData.screened || 0,
+          included: statsData.included || 0,
+          excluded: statsData.excluded || 0,
+          maybe: statsData.maybe || 0,
+          fulltext: statsData.fulltext_total || 0,
+          duplicates: 0 // Will be fetched separately if needed
+        });
       } catch (error) {
         console.error("Failed to fetch review:", error);
       } finally {
@@ -185,11 +207,11 @@ export default function OverviewPage() {
     }
   };
 
-  const inputCls = "w-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-colors";
+  const inputCls = "w-full bg-white dark:bg-[#0d0d0d] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#1a5f7a] transition-colors";
 
-  // Get article count from review data (which includes articles_count from backend)
-  const totalArticles = review?.articles_count || review?.articles?.length || 0;
-  const screenedCount = 0; // TODO: Implement screening status
+  // Calculate progress
+  const totalArticles = stats.total;
+  const screenedCount = stats.screened;
   const progressPercentage = totalArticles > 0 ? Math.round((screenedCount / totalArticles) * 100) : 0;
 
   return (
@@ -198,10 +220,10 @@ export default function OverviewPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Overview</h1>
         <div className="flex items-center gap-3">
-          <button onClick={openEdit} className="bg-black dark:bg-white text-white dark:text-black text-sm px-4 py-2 rounded-lg font-medium hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors">
+          <button onClick={openEdit} className="text-sm px-4 py-2 rounded-lg font-medium text-white transition-colors" style={{ background: "#1a5f7a" }}>
             Edit Info
           </button>
-          <button onClick={() => setInviteModal(true)} className="border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white text-sm px-4 py-2 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+          <button onClick={() => setInviteModal(true)} className="text-sm px-4 py-2 rounded-lg font-medium border transition-colors" style={{ borderColor: "#1a5f7a", color: "#1a5f7a" }}>
             + Invite Member
           </button>
         </div>
@@ -244,24 +266,48 @@ export default function OverviewPage() {
         <div className="p-6">
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
             {totalArticles > 0 
-              ? `You have successfully imported ${totalArticles} articles! 🎉` 
+              ? `You have successfully imported ${totalArticles.toLocaleString()} articles! 🎉` 
               : "No articles imported yet. Upload articles to get started."}
           </p>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             {/* Total Articles */}
             <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-center bg-white dark:bg-black">
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Total Articles</p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">{totalArticles}</p>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">{totalArticles.toLocaleString()}</p>
+            </div>
+            {/* Screened */}
+            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-center bg-white dark:bg-black">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Screened</p>
+              <p className="text-3xl font-bold" style={{ color: "#1a5f7a" }}>{screenedCount.toLocaleString()}</p>
+            </div>
+            {/* Included */}
+            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-center bg-white dark:bg-black">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Included</p>
+              <p className="text-3xl font-bold text-green-600 dark:text-green-400">{stats.included.toLocaleString()}</p>
+            </div>
+            {/* Excluded */}
+            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-center bg-white dark:bg-black">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Excluded</p>
+              <p className="text-3xl font-bold text-red-600 dark:text-red-400">{stats.excluded.toLocaleString()}</p>
+            </div>
+          </div>
+          
+          {/* Additional Stats Row */}
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            {/* Maybe */}
+            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-center bg-white dark:bg-black">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Maybe</p>
+              <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">{stats.maybe.toLocaleString()}</p>
+            </div>
+            {/* Full-Text */}
+            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-center bg-white dark:bg-black">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Full-Text</p>
+              <p className="text-3xl font-bold" style={{ color: "#1a5f7a" }}>{stats.fulltext.toLocaleString()}</p>
             </div>
             {/* Team Members */}
             <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-center bg-white dark:bg-black">
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Team Members</p>
               <p className="text-3xl font-bold text-gray-900 dark:text-white">{members.length}</p>
-            </div>
-            {/* Screened */}
-            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 text-center bg-white dark:bg-black">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Screened</p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white">{screenedCount}</p>
             </div>
           </div>
         </div>
@@ -271,7 +317,7 @@ export default function OverviewPage() {
       <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden shadow-sm">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Review Members ({members.length})</h2>
-          <button onClick={() => setInviteModal(true)} className="text-sm border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+          <button onClick={() => setInviteModal(true)} className="text-sm border px-3 py-1.5 rounded-lg transition-colors" style={{ borderColor: "#1a5f7a", color: "#1a5f7a" }}>
             + Invite Member
           </button>
         </div>
@@ -290,8 +336,8 @@ export default function OverviewPage() {
                 <tr key={idx} className="border-b border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-black dark:bg-white flex items-center justify-center shrink-0">
-                        <span className="text-white dark:text-black text-sm font-medium">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "#1a5f7a" }}>
+                        <span className="text-white text-sm font-medium">
                           {m.user?.name?.charAt(0).toUpperCase() || m.email?.charAt(0).toUpperCase() || "?"}
                         </span>
                       </div>
@@ -323,38 +369,93 @@ export default function OverviewPage() {
       {/* Screening Progress */}
       <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden shadow-sm">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Your Progress</h2>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Screening Progress</h2>
         </div>
         <div className="p-6">
           <div className="flex items-center gap-8">
             {/* Circular Progress */}
             <div className="relative w-32 h-32">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 120 120">
-                <circle cx="60" cy="60" r="54" fill="none" stroke="currentColor" strokeWidth="8" className="text-gray-200 dark:text-gray-800" />
-                <circle cx="60" cy="60" r="54" fill="none" stroke="currentColor" strokeWidth="8" strokeDasharray={`${2 * Math.PI * 54}`} strokeDashoffset={`${2 * Math.PI * 54 * (1 - progressPercentage / 100)}`} strokeLinecap="round" className="text-green-500 transition-all duration-500" />
+                <circle cx="60" cy="60" r="54" fill="none" stroke="#e5e7eb" strokeWidth="8" />
+                <circle cx="60" cy="60" r="54" fill="none" stroke="#2dd4a0" strokeWidth="8" strokeDasharray={`${2 * Math.PI * 54}`} strokeDashoffset={`${2 * Math.PI * 54 * (1 - progressPercentage / 100)}`} strokeLinecap="round" className="transition-all duration-500" />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-2xl font-bold text-gray-900 dark:text-white">{progressPercentage}%</span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">Screened</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Complete</span>
               </div>
             </div>
 
             {/* Progress Stats */}
-            <div className="flex-1 grid grid-cols-3 gap-4">
+            <div className="flex-1 grid grid-cols-4 gap-4">
               <div className="text-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalArticles}</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Total Articles</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalArticles.toLocaleString()}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Total</p>
               </div>
-              <div className="text-center p-4 bg-green-50 dark:bg-green-950 rounded-lg">
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{screenedCount}</p>
+              <div className="text-center p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                <p className="text-2xl font-bold" style={{ color: "#1a5f7a" }}>{screenedCount.toLocaleString()}</p>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Screened</p>
               </div>
+              <div className="text-center p-4 bg-green-50 dark:bg-green-950 rounded-lg">
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.included.toLocaleString()}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Included</p>
+              </div>
               <div className="text-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalArticles - screenedCount}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{(totalArticles - screenedCount).toLocaleString()}</p>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Remaining</p>
               </div>
             </div>
           </div>
+          
+          {/* Progress Bar Breakdown */}
+          {totalArticles > 0 && (
+            <div className="mt-6">
+              <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-2">
+                <span>Screening Breakdown</span>
+                <span>{screenedCount} / {totalArticles} articles</span>
+              </div>
+              <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden flex">
+                {stats.included > 0 && (
+                  <div 
+                    className="h-full transition-all duration-500" 
+                    style={{ width: `${(stats.included / totalArticles) * 100}%`, background: "#2dd4a0" }}
+                    title={`Included: ${stats.included}`}
+                  />
+                )}
+                {stats.excluded > 0 && (
+                  <div 
+                    className="h-full transition-all duration-500" 
+                    style={{ width: `${(stats.excluded / totalArticles) * 100}%`, background: "#f87171" }}
+                    title={`Excluded: ${stats.excluded}`}
+                  />
+                )}
+                {stats.maybe > 0 && (
+                  <div 
+                    className="h-full transition-all duration-500" 
+                    style={{ width: `${(stats.maybe / totalArticles) * 100}%`, background: "#fbbf24" }}
+                    title={`Maybe: ${stats.maybe}`}
+                  />
+                )}
+              </div>
+              <div className="flex items-center gap-4 mt-3 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded" style={{ background: "#2dd4a0" }}></div>
+                  <span className="text-gray-600 dark:text-gray-400">Included ({stats.included})</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded" style={{ background: "#f87171" }}></div>
+                  <span className="text-gray-600 dark:text-gray-400">Excluded ({stats.excluded})</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded" style={{ background: "#fbbf24" }}></div>
+                  <span className="text-gray-600 dark:text-gray-400">Maybe ({stats.maybe})</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 bg-gray-300 dark:bg-gray-700 rounded"></div>
+                  <span className="text-gray-600 dark:text-gray-400">Unscreened ({totalArticles - screenedCount})</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -380,7 +481,7 @@ export default function OverviewPage() {
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-800">
               <button onClick={() => setEditModal(false)} className="text-xs text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 px-3 py-1.5 rounded">Cancel</button>
-              <button onClick={saveEdit} className="text-xs bg-gray-900 dark:bg-white text-white dark:text-black px-4 py-1.5 rounded hover:bg-gray-700 dark:hover:bg-gray-200">Save Changes</button>
+              <button onClick={saveEdit} className="text-xs text-white px-4 py-1.5 rounded hover:opacity-90 transition-colors" style={{ background: "#1a5f7a" }}>Save Changes</button>
             </div>
           </div>
         </div>
@@ -416,7 +517,7 @@ export default function OverviewPage() {
             </div>
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-800">
               <button onClick={() => setInviteModal(false)} className="text-xs text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 px-3 py-1.5 rounded">Cancel</button>
-              <button onClick={sendInvite} disabled={!invite.email} className="text-xs bg-gray-900 dark:bg-white text-white dark:text-black px-4 py-1.5 rounded hover:bg-gray-700 dark:hover:bg-gray-200 disabled:bg-gray-300 disabled:cursor-not-allowed">Send Invitation</button>
+              <button onClick={sendInvite} disabled={!invite.email} className="text-xs text-white px-4 py-1.5 rounded disabled:opacity-40 disabled:cursor-not-allowed transition-colors" style={{ background: "#1a5f7a" }}>Send Invitation</button>
             </div>
           </div>
         </div>

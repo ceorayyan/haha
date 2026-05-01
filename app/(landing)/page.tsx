@@ -57,8 +57,27 @@ export default function LandingPage() {
   if (isLoading) {
     return (
       <div className={`landing-page ${isDark ? "dark" : "light"}`}>
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
+        <div className="min-h-screen p-8">
+          {/* Navbar skeleton */}
+          <div className="animate-pulse">
+            <div className="flex justify-between items-center mb-12">
+              <div className="h-8 w-32 bg-gray-200 dark:bg-gray-800 rounded"></div>
+              <div className="flex gap-4">
+                <div className="h-10 w-24 bg-gray-200 dark:bg-gray-800 rounded"></div>
+                <div className="h-10 w-24 bg-gray-200 dark:bg-gray-800 rounded"></div>
+              </div>
+            </div>
+            {/* Hero skeleton */}
+            <div className="max-w-4xl mx-auto text-center space-y-6 mt-20">
+              <div className="h-12 bg-gray-200 dark:bg-gray-800 rounded w-3/4 mx-auto"></div>
+              <div className="h-12 bg-gray-200 dark:bg-gray-800 rounded w-2/3 mx-auto"></div>
+              <div className="h-6 bg-gray-200 dark:bg-gray-800 rounded w-1/2 mx-auto mt-8"></div>
+              <div className="flex gap-4 justify-center mt-8">
+                <div className="h-12 w-32 bg-gray-200 dark:bg-gray-800 rounded"></div>
+                <div className="h-12 w-32 bg-gray-200 dark:bg-gray-800 rounded"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );

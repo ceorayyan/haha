@@ -19,6 +19,16 @@ interface FilterBarProps {
   articles: Article[];
 }
 
+const SkeletonKeyword = () => (
+  <div className="flex items-center justify-between px-2 py-1.5 rounded-lg animate-pulse">
+    <div className="flex items-center gap-2">
+      <div className="w-3.5 h-3.5 rounded bg-[var(--surface-2)]" />
+      <div className="h-3 rounded bg-[var(--surface-2)]" style={{ width: `${48 + Math.random() * 40}px` }} />
+    </div>
+    <div className="h-3 w-5 rounded bg-[var(--surface-2)]" />
+  </div>
+);
+
 export default function FilterBar({
   includeKeywords,
   excludeKeywords,
@@ -31,6 +41,8 @@ export default function FilterBar({
   const [customExcludeKeyword, setCustomExcludeKeyword] = useState<string>("");
   const [showIncludeInput, setShowIncludeInput] = useState(false);
   const [showExcludeInput, setShowExcludeInput] = useState(false);
+
+  const isLoading = articles.length === 0;
 
   // Extract keywords from articles for suggestions
   const extractKeywords = useMemo(() => {
@@ -66,9 +78,7 @@ export default function FilterBar({
     const words = customIncludeKeyword.split(',').map(w => w.trim()).filter(Boolean);
     const newKeywords = [...includeKeywords];
     words.forEach(word => {
-      if (!newKeywords.includes(word)) {
-        newKeywords.push(word);
-      }
+      if (!newKeywords.includes(word)) newKeywords.push(word);
     });
     onIncludeKeywordsChange(newKeywords);
     setCustomIncludeKeyword("");
@@ -78,29 +88,24 @@ export default function FilterBar({
     const words = customExcludeKeyword.split(',').map(w => w.trim()).filter(Boolean);
     const newKeywords = [...excludeKeywords];
     words.forEach(word => {
-      if (!newKeywords.includes(word)) {
-        newKeywords.push(word);
-      }
+      if (!newKeywords.includes(word)) newKeywords.push(word);
     });
     onExcludeKeywordsChange(newKeywords);
     setCustomExcludeKeyword("");
   };
 
-  // Combine custom keywords with suggested keywords for include
   const includeKeywordsList = useMemo(() => {
     const suggested = extractKeywords.map(k => k.word);
     const custom = includeKeywords.filter(k => !suggested.includes(k));
     return [...custom, ...suggested];
   }, [includeKeywords, extractKeywords]);
 
-  // Combine custom keywords with suggested keywords for exclude
   const excludeKeywordsList = useMemo(() => {
     const suggested = extractKeywords.map(k => k.word);
     const custom = excludeKeywords.filter(k => !suggested.includes(k));
     return [...custom, ...suggested];
   }, [excludeKeywords, extractKeywords]);
 
-  // Get count for a keyword
   const getKeywordCount = (keyword: string) => {
     return extractKeywords.find(k => k.word === keyword)?.count || 0;
   };
@@ -129,7 +134,6 @@ export default function FilterBar({
           </button>
         </div>
 
-        {/* Custom include keyword input */}
         {showIncludeInput && (
           <div className="mb-2 flex gap-1.5">
             <input
@@ -137,64 +141,47 @@ export default function FilterBar({
               placeholder="comma, separated…"
               value={customIncludeKeyword}
               onChange={(e) => setCustomIncludeKeyword(e.target.value)}
-              onKeyDown={(e) => { 
-                if (e.key === 'Enter') { 
-                  addCustomIncludeKeyword(); 
-                  setShowIncludeInput(false); 
-                } 
-              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { addCustomIncludeKeyword(); setShowIncludeInput(false); } }}
               autoFocus
               className="flex-1 text-xs bg-white dark:bg-[var(--surface-1)] border-2 border-green-400 text-[var(--text-primary)] placeholder-[var(--text-muted)] rounded-lg px-2 py-1.5 focus:outline-none"
             />
-            <button 
-              onClick={() => { 
-                addCustomIncludeKeyword(); 
-                setShowIncludeInput(false); 
-              }} 
-              className="px-2 py-1.5 bg-green-500 text-white rounded-lg text-xs font-semibold hover:bg-green-600 transition-colors shrink-0"
-            >
+            <button onClick={() => { addCustomIncludeKeyword(); setShowIncludeInput(false); }} className="px-2 py-1.5 bg-green-500 text-white rounded-lg text-xs font-semibold hover:bg-green-600 transition-colors shrink-0">
               Add
             </button>
           </div>
         )}
 
-        {/* Keyword checklist - active keywords appear here with checkboxes */}
         <div className="space-y-0.5">
-          {includeKeywordsList.slice(0, 15).map((word) => {
-            const isActive = includeKeywords.includes(word);
-            const count = getKeywordCount(word);
-            
-            return (
-              <label 
-                key={word} 
-                className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-[var(--surface-2)] cursor-pointer transition-colors"
-                style={{
-                  background: isActive ? "var(--surface-2)" : "transparent",
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="checkbox" 
-                    checked={isActive} 
-                    onChange={() => toggleIncludeKeyword(word)} 
-                    className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 accent-green-500" 
-                  />
-                  <span 
-                    className="text-xs"
-                    style={{
-                      color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
-                      fontWeight: isActive ? 600 : 400,
-                    }}
-                  >
-                    {word}
-                  </span>
-                </div>
-                {count > 0 && (
-                  <span className="text-xs text-[var(--text-muted)] font-semibold tabular-nums">{count}</span>
-                )}
-              </label>
-            );
-          })}
+          {isLoading ? (
+            Array.from({ length: 8 }).map((_, i) => <SkeletonKeyword key={i} />)
+          ) : (
+            includeKeywordsList.slice(0, 15).map((word) => {
+              const isActive = includeKeywords.includes(word);
+              const count = getKeywordCount(word);
+              return (
+                <label
+                  key={word}
+                  className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-[var(--surface-2)] cursor-pointer transition-colors"
+                  style={{ background: isActive ? "var(--surface-2)" : "transparent" }}
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={() => toggleIncludeKeyword(word)}
+                      className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 accent-green-500"
+                    />
+                    <span className="text-xs" style={{ color: isActive ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: isActive ? 600 : 400 }}>
+                      {word}
+                    </span>
+                  </div>
+                  {count > 0 && (
+                    <span className="text-xs text-[var(--text-muted)] font-semibold tabular-nums">{count}</span>
+                  )}
+                </label>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -221,7 +208,6 @@ export default function FilterBar({
           </button>
         </div>
 
-        {/* Custom exclude keyword input */}
         {showExcludeInput && (
           <div className="mb-2 flex gap-1.5">
             <input
@@ -229,89 +215,76 @@ export default function FilterBar({
               placeholder="comma, separated…"
               value={customExcludeKeyword}
               onChange={(e) => setCustomExcludeKeyword(e.target.value)}
-              onKeyDown={(e) => { 
-                if (e.key === 'Enter') { 
-                  addCustomExcludeKeyword(); 
-                  setShowExcludeInput(false); 
-                } 
-              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { addCustomExcludeKeyword(); setShowExcludeInput(false); } }}
               autoFocus
               className="flex-1 text-xs bg-white dark:bg-[var(--surface-1)] border-2 border-red-400 text-[var(--text-primary)] placeholder-[var(--text-muted)] rounded-lg px-2 py-1.5 focus:outline-none"
             />
-            <button 
-              onClick={() => { 
-                addCustomExcludeKeyword(); 
-                setShowExcludeInput(false); 
-              }} 
-              className="px-2 py-1.5 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors shrink-0"
-            >
+            <button onClick={() => { addCustomExcludeKeyword(); setShowExcludeInput(false); }} className="px-2 py-1.5 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors shrink-0">
               Add
             </button>
           </div>
         )}
 
-        {/* Keyword checklist - active keywords appear here with checkboxes */}
         <div className="space-y-0.5">
-          {excludeKeywordsList.slice(0, 15).map((word) => {
-            const isActive = excludeKeywords.includes(word);
-            const count = getKeywordCount(word);
-            
-            return (
-              <label 
-                key={word} 
-                className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-[var(--surface-2)] cursor-pointer transition-colors"
-                style={{
-                  background: isActive ? "var(--surface-2)" : "transparent",
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="checkbox" 
-                    checked={isActive} 
-                    onChange={() => toggleExcludeKeyword(word)} 
-                    className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 accent-red-500" 
-                  />
-                  <span 
-                    className="text-xs"
-                    style={{
-                      color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
-                      fontWeight: isActive ? 600 : 400,
-                    }}
-                  >
-                    {word}
-                  </span>
-                </div>
-                {count > 0 && (
-                  <span className="text-xs text-[var(--text-muted)] font-semibold tabular-nums">{count}</span>
-                )}
-              </label>
-            );
-          })}
+          {isLoading ? (
+            Array.from({ length: 8 }).map((_, i) => <SkeletonKeyword key={i} />)
+          ) : (
+            excludeKeywordsList.slice(0, 15).map((word) => {
+              const isActive = excludeKeywords.includes(word);
+              const count = getKeywordCount(word);
+              return (
+                <label
+                  key={word}
+                  className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-[var(--surface-2)] cursor-pointer transition-colors"
+                  style={{ background: isActive ? "var(--surface-2)" : "transparent" }}
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={isActive}
+                      onChange={() => toggleExcludeKeyword(word)}
+                      className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 accent-red-500"
+                    />
+                    <span className="text-xs" style={{ color: isActive ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: isActive ? 600 : 400 }}>
+                      {word}
+                    </span>
+                  </div>
+                  {count > 0 && (
+                    <span className="text-xs text-[var(--text-muted)] font-semibold tabular-nums">{count}</span>
+                  )}
+                </label>
+              );
+            })
+          )}
         </div>
       </div>
 
-      {/* Filter summary */}
+      {/* Active filter summary */}
       {(includeKeywords.length > 0 || excludeKeywords.length > 0) && (
-        <div className="pt-4 border-t border-[var(--border-subtle)]">
-          <div className="text-xs text-[var(--text-muted)] mb-2">Active Filters:</div>
-          <div className="space-y-1 text-xs">
+        <div className="pt-3 border-t border-[var(--border-subtle)]">
+          <div className="text-xs text-[var(--text-muted)] mb-2 font-semibold uppercase tracking-wider">Active Filters</div>
+          <div className="space-y-1 text-xs mb-2">
             {includeKeywords.length > 0 && (
-              <div className="text-green-600 dark:text-green-400">
-                Include: {includeKeywords.length} keyword{includeKeywords.length !== 1 ? 's' : ''}
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                <span className="text-green-600 dark:text-green-400">
+                  {includeKeywords.length} include keyword{includeKeywords.length !== 1 ? 's' : ''}
+                </span>
               </div>
             )}
             {excludeKeywords.length > 0 && (
-              <div className="text-red-600 dark:text-red-400">
-                Exclude: {excludeKeywords.length} keyword{excludeKeywords.length !== 1 ? 's' : ''}
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                <span className="text-red-600 dark:text-red-400">
+                  {excludeKeywords.length} exclude keyword{excludeKeywords.length !== 1 ? 's' : ''}
+                </span>
               </div>
             )}
           </div>
           <button
-            onClick={() => {
-              onIncludeKeywordsChange([]);
-              onExcludeKeywordsChange([]);
-            }}
-            className="mt-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+            onClick={() => { onIncludeKeywordsChange([]); onExcludeKeywordsChange([]); }}
+            className="text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors w-full text-center"
+            style={{ background: "var(--surface-2)", color: "var(--text-muted)" }}
           >
             Clear all filters
           </button>
