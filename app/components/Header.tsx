@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
 import { useData } from "../context/DataContext";
+import { useTheme } from "../providers/ThemeProvider";
 import api from "../../lib/api";
 import { getBrandingConfig, getLogoInitial, BrandingConfig } from "../../lib/branding";
 
@@ -21,10 +22,12 @@ type StoredUser = {
 
 export default function Header({ onMenuClick, title, showTitle = true }: HeaderProps) {
   const { blindMode, toggleBlindMode } = useData();
+  const { theme } = useTheme();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [branding, setBranding] = useState<BrandingConfig | null>(null);
   const [currentUser, setCurrentUser] = useState<StoredUser | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [brandingLoaded, setBrandingLoaded] = useState(false);
   const router = useRouter();
 
   const userInitial = currentUser?.name?.charAt(0).toUpperCase() || "U";
@@ -39,6 +42,7 @@ export default function Header({ onMenuClick, title, showTitle = true }: HeaderP
     const loadBranding = async () => {
       const config = await getBrandingConfig();
       setBranding(config);
+      setBrandingLoaded(true);
     };
 
     loadBranding();
@@ -48,8 +52,9 @@ export default function Header({ onMenuClick, title, showTitle = true }: HeaderP
     return () => window.removeEventListener("brandingConfigChanged", loadBranding);
   }, []);
 
-  const displayTitle = title || branding?.websiteName || "StataNexus.Ai";
+  const displayTitle = title || branding?.websiteName || "StataNex.Ai";
   const logoInitial = branding ? getLogoInitial(branding.websiteName) : "S";
+  const logoUrl = branding?.logoUrl;
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -80,8 +85,8 @@ export default function Header({ onMenuClick, title, showTitle = true }: HeaderP
 
       {/* Logo */}
       <div className="flex items-center gap-2">
-        {branding?.logoUrl ? (
-          <img src={branding.logoUrl} alt="Logo" className="w-7 h-7 object-contain rounded" />
+        {logoUrl ? (
+          <img src={logoUrl} alt="Logo" className="w-7 h-7 object-contain rounded" />
         ) : (
           <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#1a5f7a" }}>
             <span className="text-white font-bold text-sm">{logoInitial}</span>
@@ -146,7 +151,7 @@ export default function Header({ onMenuClick, title, showTitle = true }: HeaderP
                 </svg>
               </div>
               <div className="text-center">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Logging out…</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Logging out from {displayTitle}…</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Please wait</p>
               </div>
             </div>

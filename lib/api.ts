@@ -520,11 +520,25 @@ class ApiClient {
 
   // Settings Methods
   async getSettings() {
-    // DISABLED: Return static defaults to prevent reload loops
-    // The branding system now uses localStorage only
+    try {
+      const response = await fetch(`${this.baseUrl}/settings`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (error) {
+      console.error('Failed to fetch settings from API:', error);
+    }
+
+    // Fallback to defaults
     return {
-      website_name: 'Research Nexus',
-      logo_url: '/logo-static.png',
+      website_name: 'StataNex.Ai',
+      logo_url: null,
     };
   }
 

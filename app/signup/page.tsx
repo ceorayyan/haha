@@ -26,7 +26,7 @@ export default function SignupPage() {
             </div>
           )}
           <h1 className="text-3xl font-bold text-white tracking-tight">
-            {branding.website_name}
+            {branding.website_name || "StataNex.Ai"}
           </h1>
           <p className="text-zinc-500 mt-2 text-sm">
             Redirecting to login...

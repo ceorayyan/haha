@@ -976,7 +976,7 @@ export default function ReviewDataPage() {
                 <>
                   {sortedArticles.map((article, idx) => (
                     <tr
-                      key={article.id}
+                      key={`${article.id}-${idx}`}
                       className="hover:bg-[var(--surface-2)] transition-colors cursor-pointer group border-b border-[var(--border-subtle)]"
                       style={{
                         background: activeArticleId === article.id ? "var(--accent-soft)" : undefined,

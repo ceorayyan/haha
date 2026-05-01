@@ -4,15 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, useScroll, useTransform, useInView } from "framer-motion";
 import { api } from "@/lib/api";
+import { useTheme } from "../providers/ThemeProvider";
 import "../landing.css";
 
 export default function LandingPage() {
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isDark, setIsDark] = useState(() => {
-    // Initialize from system preference (client component)
-    if (typeof window === "undefined") return true;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
-  });
+  const { theme, toggleTheme } = useTheme();
   const [websiteName, setWebsiteName] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -34,12 +31,12 @@ export default function LandingPage() {
     const fetchSettings = async () => {
       try {
         const settings = await api.getSettings();
-        setWebsiteName(settings.website_name || "Research Nexus");
+        setWebsiteName(settings.website_name || "StataNex.Ai");
         setLogoUrl(settings.logo_url || "/logo-static.png");
       } catch (error) {
         console.error("Failed to fetch settings:", error);
         // Use defaults if fetch fails
-        setWebsiteName("Research Nexus");
+        setWebsiteName("StataNex.Ai");
         setLogoUrl("/logo-static.png");
       } finally {
         setIsLoading(false);
@@ -49,14 +46,10 @@ export default function LandingPage() {
     fetchSettings();
   }, []);
 
-  const toggleTheme = () => {
-    setIsDark(!isDark);
-  };
-
   // Show loading state while fetching settings
   if (isLoading) {
     return (
-      <div className={`landing-page ${isDark ? "dark" : "light"}`}>
+      <div className={`landing-page ${theme === "dark" ? "dark" : "light"}`}>
         <div className="min-h-screen p-8">
           {/* Navbar skeleton */}
           <div className="animate-pulse">
@@ -84,7 +77,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div className={`landing-page ${isDark ? "dark" : "light"}`}>
+    <div className={`landing-page ${theme === "dark" ? "dark" : "light"}`}>
       {/* Navbar */}
       <motion.nav
         initial={{ y: -100 }}
@@ -101,7 +94,7 @@ export default function LandingPage() {
           </Link>
           <div className="nav-actions">
             <button onClick={toggleTheme} className="btn btn-ghost theme-toggle" aria-label="Toggle theme">
-              {isDark ? (
+              {theme === "dark" ? (
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="5" />
                   <line x1="12" y1="1" x2="12" y2="3" />
