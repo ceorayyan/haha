@@ -43,11 +43,11 @@ export default function OverviewPage() {
         
         setStats({
           total: statsData.total || 0,
-          screened: statsData.screened || 0,
+          screened: (statsData.included || 0) + (statsData.excluded || 0),
           included: statsData.included || 0,
           excluded: statsData.excluded || 0,
-          maybe: statsData.maybe || 0,
-          fulltext: statsData.fulltext_total || 0,
+          maybe: statsData.undecided || 0,
+          fulltext: 0,
           duplicates: 0 // Will be fetched separately if needed
         });
       } catch (error) {

@@ -155,7 +155,7 @@ export default function FullTextPage() {
       const arr = Array.isArray(res) ? res : res?.data || [];
       
       const included = arr.filter((a: Article) => a.screening_decision === "included").length;
-      const maybe = arr.filter((a: Article) => a.screening_decision === "undecided" && a.screening_decision_by).length;
+      const maybe = arr.filter((a: Article) => a.screening_decision === "undecided").length;
       const labeled = arr.filter((a: Article) => a.labels && a.labels.length > 0).length;
       
       setImportCounts({ included, maybe, labeled });
@@ -175,7 +175,7 @@ export default function FullTextPage() {
         if (a.fulltext_status !== null && a.fulltext_status !== undefined) return false;
         
         if (importIncluded && a.screening_decision === "included") return true;
-        if (importMaybe && a.screening_decision === "undecided" && a.screening_decision_by) return true;
+        if (importMaybe && a.screening_decision === "undecided") return true;
         if (importLabeled && a.labels && a.labels.length > 0) return true;
         return false;
       });
@@ -692,7 +692,9 @@ export default function FullTextPage() {
                         ) : (
                           <>
                             <input
-                              ref={(el) => (fileInputRefs.current[article.id] = el)}
+                              ref={(el) => {
+                                if (el) fileInputRefs.current[article.id] = el;
+                              }}
                               type="file"
                               accept=".pdf"
                               className="hidden"

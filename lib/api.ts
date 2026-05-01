@@ -1,5 +1,36 @@
-// API Configuration and Helper Functions
-// Multiple backend URLs with fallback support
+/**
+ * ============================================================================
+ * API CONFIGURATION & CLIENT
+ * ============================================================================
+ * 
+ * MULTI-URL FALLBACK SYSTEM:
+ * The API client tries multiple URLs in order of preference:
+ * 1. https://api.statanex.com (Production)
+ * 2. https://backend-of-research-nexus-ai.free.laravel.cloud (Staging)
+ * 3. http://localhost:8000 (Local Development)
+ * 
+ * HOW TO USE ONLY ONE API URL:
+ * ─────────────────────────────
+ * If you want to use ONLY ONE specific API URL, comment out the others below.
+ * 
+ * Example - Use ONLY Production:
+ *   const API_URLS = [
+ *     'https://api.statanex.com',
+ *     // 'https://backend-of-research-nexus-ai.free.laravel.cloud',
+ *     // 'http://localhost:8000',
+ *   ];
+ * 
+ * Example - Use ONLY Local Development:
+ *   const API_URLS = [
+ *     // 'https://api.statanex.com',
+ *     // 'https://backend-of-research-nexus-ai.free.laravel.cloud',
+ *     'http://localhost:8000',
+ *   ];
+ * 
+ * The system will automatically use the first available URL from the list.
+ * ============================================================================
+ */
+
 import type {
   DetectionResponse,
   PaginatedDuplicates,
@@ -8,25 +39,108 @@ import type {
 } from '../types/duplicate';
 
 const API_URLS = [
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api',
-  // 'https://backend-of-research-nexus-ai.free.laravel.cloud/api',
-  // 'https://api.statanex.com/api',
+  'https://api.statanex.com',
+  'https://backend-of-research-nexus-ai.free.laravel.cloud',
+  'http://localhost:8000',
 ];
 
-// API Client with authentication
+// ============================================================================
+// API URL DETECTION FUNCTIONS
+// ============================================================================
+
+let cachedApiUrl: string | null = null;
+
+/**
+ * Test if an API URL is accessible by checking the /health endpoint
+ */
+async function testApiUrl(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${url}/health`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return response.ok;
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * Get the working API URL with fallback
+ * Tries each URL in order and caches the result to avoid repeated health checks
+ */
+async function getApiUrl(): Promise<string> {
+  // Return cached URL if available
+  if (cachedApiUrl) {
+    return cachedApiUrl;
+  }
+
+  // Try each URL in order
+  for (const url of API_URLS) {
+    try {
+      const isAccessible = await testApiUrl(url);
+      if (isAccessible) {
+        cachedApiUrl = url;
+        console.log(`✓ Using API URL: ${url}`);
+        return url;
+      }
+    } catch (error) {
+      console.warn(`✗ Failed to connect to ${url}:`, error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  // Fallback to localhost if all fail
+  cachedApiUrl = 'http://localhost:8000';
+  console.warn(`⚠ All API URLs failed. Falling back to: ${cachedApiUrl}`);
+  return cachedApiUrl;
+}
+
+/**
+ * Get API URL synchronously (uses cached value or defaults)
+ * Use this when you need immediate result without async
+ */
+function getApiUrlSync(): string {
+  if (cachedApiUrl) {
+    return cachedApiUrl;
+  }
+  // Default to localhost if not cached yet
+  return 'http://localhost:8000';
+}
+
+/**
+ * Reset cached URL (useful for testing or manual refresh)
+ */
+function resetApiUrl(): void {
+  cachedApiUrl = null;
+}
+
+// ============================================================================
+// API CLIENT CLASS
+// ============================================================================
+
 class ApiClient {
   private baseUrl: string;
   private availableUrls: string[];
   private currentUrlIndex: number = 0;
+  private apiUrlPromise: Promise<string> | null = null;
 
   constructor(baseUrls: string[]) {
     this.availableUrls = baseUrls;
-    // FORCE localhost only - ignore any stored URL
-    this.baseUrl = baseUrls[0]; // Always use first URL (localhost)
+    // Start with localhost as default, will be updated when getApiUrl() is called
+    this.baseUrl = 'http://localhost:8000';
     this.currentUrlIndex = 0;
-    // Clear any stored remote URL
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('api_base_url');
+    
+    // Initialize API URL detection in background
+    this.initializeApiUrl();
+  }
+
+  private async initializeApiUrl(): Promise<void> {
+    try {
+      const url = await getApiUrl();
+      this.baseUrl = url;
+      console.log(`API Client initialized with: ${this.baseUrl}`);
+    } catch (error) {
+      console.error('Failed to initialize API URL:', error);
     }
   }
 
@@ -43,12 +157,6 @@ class ApiClient {
     }
   }
 
-  private async tryNextUrl(): Promise<void> {
-    // DISABLED: Don't try other URLs, stay on localhost
-    console.warn('API request failed, but fallback URLs are disabled. Staying on localhost.');
-    return;
-  }
-
   public getCurrentBaseUrl(): string {
     return this.baseUrl;
   }
@@ -61,8 +169,12 @@ class ApiClient {
     if (this.availableUrls.includes(url)) {
       this.baseUrl = url;
       this.currentUrlIndex = this.availableUrls.indexOf(url);
-      this.setStoredBaseUrl(url);
     }
+  }
+
+  public async resetApiUrl(): Promise<void> {
+    resetApiUrl();
+    await this.initializeApiUrl();
   }
 
   private getHeaders(includeAuth: boolean = true): HeadersInit {
@@ -108,80 +220,85 @@ class ApiClient {
   ): Promise<T> {
     const headers = this.getHeaders(includeAuth);
 
-    // FORCE localhost only - no retries with other URLs
+    // Use the current base URL (which is dynamically determined)
     const url = `${this.baseUrl}${endpoint}`;
     
     console.log(`API Request: ${options.method || 'GET'} ${url}`);
     
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...headers,
-        ...options.headers,
-      },
-    });
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          ...headers,
+          ...options.headers,
+        },
+      });
 
-    if (!response.ok) {
-      // Parse error response
-      const error = await response.json().catch(() => ({
-        message: 'An error occurred',
-      }));
+      if (!response.ok) {
+        // Parse error response
+        const error = await response.json().catch(() => ({
+          message: 'An error occurred',
+        }));
 
-      // Handle 401 Unauthorized - token expired or invalid
-      if (response.status === 401) {
-        // If this is a login request, show specific error
-        if (endpoint === '/login') {
+        // Handle 401 Unauthorized - token expired or invalid
+        if (response.status === 401) {
+          // If this is a login request, show specific error
+          if (endpoint === '/login') {
+            const errorMessage = error.message || 
+                               error.errors?.password?.[0] || 
+                               'The password you entered is incorrect.';
+            throw new Error(errorMessage);
+          }
+          
+          // For review member checks, don't redirect - just throw error
+          if (endpoint.includes('/members') || endpoint.includes('/accept')) {
+            throw new Error('Unauthorized');
+          }
+          
+          // For other requests, token is invalid - clear and redirect to login
+          this.removeToken();
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+          }
+          throw new Error('Session expired. Please login again.');
+        }
+
+        // Handle 404 Not Found (user doesn't exist)
+        if (response.status === 404) {
           const errorMessage = error.message || 
-                             error.errors?.password?.[0] || 
-                             'The password you entered is incorrect.';
+                             error.errors?.email?.[0] || 
+                             'No account found with this email address.';
+          throw new Error(errorMessage);
+        }
+
+        // Handle 403 Forbidden
+        if (response.status === 403) {
+          const errorMessage = error.message || 'You do not have permission to access this resource.';
+          throw new Error(errorMessage);
+        }
+
+        // Handle 422 Validation Error
+        if (response.status === 422) {
+          const errorMessage = error.message || 
+                             error.errors?.[Object.keys(error.errors)[0]]?.[0] || 
+                             'Validation failed. Please check your input.';
           throw new Error(errorMessage);
         }
         
-        // For review member checks, don't redirect - just throw error
-        if (endpoint.includes('/members') || endpoint.includes('/accept')) {
-          throw new Error('Unauthorized');
-        }
-        
-        // For other requests, token is invalid - clear and redirect to login
-        this.removeToken();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
-        throw new Error('Session expired. Please login again.');
-      }
-
-      // Handle 404 Not Found (user doesn't exist)
-      if (response.status === 404) {
-        const errorMessage = error.message || 
-                           error.errors?.email?.[0] || 
-                           'No account found with this email address.';
-        throw new Error(errorMessage);
-      }
-
-      // Handle 403 Forbidden
-      if (response.status === 403) {
-        const errorMessage = error.message || 'You do not have permission to access this resource.';
-        throw new Error(errorMessage);
-      }
-
-      // Handle 422 Validation Error
-      if (response.status === 422) {
+        // Generic error message
         const errorMessage = error.message || 
                            error.errors?.[Object.keys(error.errors)[0]]?.[0] || 
-                           'Validation failed. Please check your input.';
+                           `Request failed with status ${response.status}`;
+        
         throw new Error(errorMessage);
       }
-      
-      // Generic error message
-      const errorMessage = error.message || 
-                         error.errors?.[Object.keys(error.errors)[0]]?.[0] || 
-                         `Request failed with status ${response.status}`;
-      
-      throw new Error(errorMessage);
-    }
 
-    // Request successful, return response
-    return await response.json();
+      // Request successful, return response
+      return await response.json();
+    } catch (error) {
+      console.error('API Request Error:', error);
+      throw error;
+    }
   }
 
   // Auth Methods
@@ -521,7 +638,8 @@ class ApiClient {
   // Settings Methods
   async getSettings() {
     try {
-      const response = await fetch(`${this.baseUrl}/settings`, {
+      const url = `${this.baseUrl}/settings`;
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

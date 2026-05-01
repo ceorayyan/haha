@@ -193,7 +193,7 @@ export default function ScreeningPage() {
         const stats = await api.getScreeningStats(reviewId);
         setScreeningStats({
           total: stats.total ?? 0,
-          undecided: stats.undecided ?? stats.unscreened ?? (stats.total - (stats.screened ?? 0)) ?? 0,
+          undecided: stats.undecided ?? 0,
           included: stats.included ?? 0,
           excluded: stats.excluded ?? 0,
         });

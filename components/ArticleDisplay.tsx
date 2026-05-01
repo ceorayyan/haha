@@ -17,6 +17,8 @@ interface Article {
   _note?: string;
   _noteAuthor?: string;
   _labels?: string[];
+  reference_id?: string;
+  fulltext_status?: string | null;
 }
 
 interface ArticleDisplayProps {
