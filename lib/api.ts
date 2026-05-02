@@ -215,6 +215,12 @@ class ApiClient {
     });
   }
 
+  async toggleBlindMode(reviewId: number) {
+    return this.request<any>(`/api/reviews/${reviewId}/blind-mode`, {
+      method: 'PATCH',
+    });
+  }
+
   async getReviewSummary(id: number) {
     return this.request<any>(`/api/reviews/${id}/summary`);
   }

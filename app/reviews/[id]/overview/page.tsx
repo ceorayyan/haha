@@ -505,9 +505,9 @@ export default function OverviewPage() {
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Role</label>
                 <select value={invite.role} onChange={e => setInvite({...invite, role: e.target.value})} className={inputCls}>
-                  <option value="reviewer">Reviewer</option>
-                  <option value="coordinator">Coordinator</option>
-                  <option value="observer">Observer</option>
+                  <option value="reviewer">Reviewer (Can screen articles)</option>
+                  <option value="collaborator">Collaborator (Full access, can invite)</option>
+                  <option value="coordinator">Coordinator (Can screen articles)</option>
                 </select>
               </div>
               <div>

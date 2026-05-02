@@ -7,6 +7,15 @@ import api from "@/lib/api";
 import FilterBar from "@/components/FilterBar";
 import ArticleDisplay from "@/components/ArticleDisplay";
 
+type Screening = {
+  user_id: number;
+  user_name: string | null;
+  decision: "included" | "excluded" | "undecided";
+  notes?: string;
+  labels?: string[];
+  exclusion_reasons?: string[];
+};
+
 type Article = {
   id: number;
   title: string;
@@ -18,6 +27,7 @@ type Article = {
   screening_notes?: string;
   labels?: string[];
   exclusion_reasons?: string[];
+  screenings?: Screening[];
   created_at: string;
   file_path?: string;
   // UI display fields
@@ -43,8 +53,8 @@ export default function ScreeningPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [totalArticles, setTotalArticles] = useState(0);
-  const [decisionFilter, setDecisionFilter] = useState<"all" | "undecided" | "included" | "excluded">("all");
-  const [screeningStats, setScreeningStats] = useState({ total: 0, undecided: 0, included: 0, excluded: 0 });
+  const [decisionFilter, setDecisionFilter] = useState<"all" | "undecided" | "included" | "excluded" | "conflicts">("all");
+  const [screeningStats, setScreeningStats] = useState({ total: 0, undecided: 0, included: 0, excluded: 0, conflicts: 0 });
   const [statsRefreshTrigger, setStatsRefreshTrigger] = useState(0);
 
   const [showLabelPopup, setShowLabelPopup] = useState(false);
@@ -133,6 +143,7 @@ export default function ScreeningPage() {
   }, [showReasonsPopup]);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchArticles = async () => {
       // Only show main loading on first page
       if (currentPage === 1) {
@@ -143,9 +154,10 @@ export default function ScreeningPage() {
       
       try {
         const res = await api.getArticles(reviewId, currentPage, 100);
+        if (cancelled) return; // Ignore if effect was cleaned up
         const arr = Array.isArray(res) ? res : res?.data || [];
         // Map persisted DB fields to UI display fields
-        const mappedArticles = arr.map((a: Article) => ({
+        const mappedArticles = arr.map((a: any) => ({
           ...a,
           _labels: a.labels && a.labels.length > 0 ? a.labels : [],
           _note: a.screening_notes || "",
@@ -153,13 +165,17 @@ export default function ScreeningPage() {
         
         // Append to existing articles for infinite scroll
         if (currentPage === 1) {
-          setArticles(mappedArticles);
+          // Deduplicate by ID (React StrictMode can cause double fetches in dev)
+          const uniqueArticles = Array.from(
+            new Map(mappedArticles.map((a: any) => [a.id, a])).values()
+          ) as Article[];
+          setArticles(uniqueArticles);
           
           // Restore last position from localStorage
           const savedIndex = localStorage.getItem(`screening_index_${reviewId}`);
           if (savedIndex) {
             const index = parseInt(savedIndex, 10);
-            if (index >= 0 && index < mappedArticles.length) {
+            if (index >= 0 && index < uniqueArticles.length) {
               setCurrentIndex(index);
             } else {
               setCurrentIndex(0);
@@ -168,22 +184,31 @@ export default function ScreeningPage() {
             setCurrentIndex(0);
           }
         } else {
-          setArticles(prev => [...prev, ...mappedArticles]);
+          // Deduplicate by ID when appending pages
+          setArticles(prev => {
+            const existingIds = new Set(prev.map((a: any) => a.id));
+            const newArticles = mappedArticles.filter((a: any) => !existingIds.has(a.id));
+            return [...prev, ...newArticles];
+          });
         }
         
         setHasMore(res?.current_page < res?.last_page);
         setTotalArticles(res?.total || arr.length);
       } catch (e: any) {
+        if (cancelled) return;
         toast.error(e?.message || "Failed to load articles");
         if (currentPage === 1) {
           setArticles([]);
         }
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (!cancelled) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     };
     fetchArticles();
+    return () => { cancelled = true; };
   }, [reviewId, currentPage]);
 
   // Fetch screening statistics
@@ -196,6 +221,7 @@ export default function ScreeningPage() {
           undecided: stats.undecided ?? 0,
           included: stats.included ?? 0,
           excluded: stats.excluded ?? 0,
+          conflicts: (stats as any).conflicts ?? 0,
         });
       } catch (e: any) {
         console.error("Failed to fetch screening stats:", e);
@@ -212,15 +238,19 @@ export default function ScreeningPage() {
       if (inc.length > 0 && !inc.some((k) => text.includes(k))) return false;
       if (exc.length > 0 && exc.some((k) => text.includes(k))) return false;
       
-      // Apply decision filter
-      if (decisionFilter === "undecided") {
+      if (decisionFilter === "conflicts") {
+        // Conflict: article has 2+ screenings with at least 2 different decisions
+        const screenings = article.screenings || [];
+        if (screenings.length < 2) return false;
+        const decisions = new Set(screenings.map(s => s.decision));
+        return decisions.size > 1;
+      } else if (decisionFilter === "undecided") {
         return !article.screening_decision || article.screening_decision === "undecided";
       } else if (decisionFilter === "included") {
         return article.screening_decision === "included";
       } else if (decisionFilter === "excluded") {
         return article.screening_decision === "excluded";
       }
-      // "all" - no filtering
       return true;
     });
   }, [articles, includeKeywords, excludeKeywords, decisionFilter]);
@@ -309,7 +339,6 @@ export default function ScreeningPage() {
   const updateDecision = async (articleId: number, decision: "included" | "excluded" | "undecided", extra?: Partial<Article>) => {
     const payload: any = {
       screening_decision: decision,
-      screening_decision_by: currentUserName,
       screening_notes: extra?.screening_notes,
       labels: extra?.labels,
       exclusion_reasons: extra?.exclusion_reasons,
@@ -320,55 +349,68 @@ export default function ScreeningPage() {
   const handleInclude = async () => {
     if (!currentArticle) return;
 
-    // Optimistic UI: switch status in-place.
     const articleToUpdate = currentArticle;
     setArticles((prev) =>
       prev.map((a) =>
-        a.id === articleToUpdate.id ? { ...a, screening_decision: "included", screening_decision_by: currentUserName } : a
+        a.id === articleToUpdate.id
+          ? {
+              ...a,
+              screening_decision: "included",
+              screening_decision_by: currentUserName,
+              screenings: [
+                ...(a.screenings || []).filter(s => s.user_name !== currentUserName),
+                { user_id: 0, user_name: currentUserName, decision: "included" as const },
+              ],
+            }
+          : a
       )
     );
 
-    // Advance immediately (no success toast).
     goNext();
 
     try {
       await updateDecision(articleToUpdate.id, "included");
-      // Refresh statistics after successful update
       setStatsRefreshTrigger(prev => prev + 1);
     } catch (e: any) {
-      setArticles((prev) => {
-        return prev.map((a) =>
-          a.id === articleToUpdate.id ? { ...a, screening_decision: "undecided", screening_decision_by: undefined } : a
-        );
-      });
+      setArticles((prev) =>
+        prev.map((a) =>
+          a.id === articleToUpdate.id ? { ...a, screening_decision: undefined, screening_decision_by: undefined } : a
+        )
+      );
       toast.error(e?.message || "Failed to update");
     }
   };
 
   const handleMaybe = async () => {
-    // Mark as undecided explicitly (for "confused" state)
     if (!currentArticle) return;
 
     const articleToUpdate = currentArticle;
 
-    // Optimistic UI: mark as undecided with decision_by set
     setArticles((prev) =>
       prev.map((a) =>
-        a.id === articleToUpdate.id ? { ...a, screening_decision: "undecided", screening_decision_by: currentUserName } : a
+        a.id === articleToUpdate.id
+          ? {
+              ...a,
+              screening_decision: "undecided",
+              screening_decision_by: currentUserName,
+              screenings: [
+                ...(a.screenings || []).filter(s => s.user_name !== currentUserName),
+                { user_id: 0, user_name: currentUserName, decision: "undecided" as const },
+              ],
+            }
+          : a
       )
     );
 
-    // Advance immediately
     goNext();
 
     try {
       await updateDecision(articleToUpdate.id, "undecided");
-      // Refresh statistics after successful update
       setStatsRefreshTrigger(prev => prev + 1);
     } catch (e: any) {
       setArticles((prev) =>
         prev.map((a) =>
-          a.id === articleToUpdate.id ? { ...a, screening_decision: "undecided", screening_decision_by: undefined } : a
+          a.id === articleToUpdate.id ? { ...a, screening_decision: undefined, screening_decision_by: undefined } : a
         )
       );
       toast.error(e?.message || "Failed to update");
@@ -380,24 +422,31 @@ export default function ScreeningPage() {
 
     const articleToUpdate = currentArticle;
 
-    // Optimistic UI: switch status in-place.
     setArticles((prev) =>
       prev.map((a) =>
-        a.id === articleToUpdate.id ? { ...a, screening_decision: "excluded", screening_decision_by: currentUserName } : a
+        a.id === articleToUpdate.id
+          ? {
+              ...a,
+              screening_decision: "excluded",
+              screening_decision_by: currentUserName,
+              screenings: [
+                ...(a.screenings || []).filter(s => s.user_name !== currentUserName),
+                { user_id: 0, user_name: currentUserName, decision: "excluded" as const },
+              ],
+            }
+          : a
       )
     );
 
-    // Advance immediately (no success toast).
     goNext();
 
     try {
       await updateDecision(articleToUpdate.id, "excluded");
-      // Refresh statistics after successful update
       setStatsRefreshTrigger(prev => prev + 1);
     } catch (e: any) {
       setArticles((prev) =>
         prev.map((a) =>
-          a.id === articleToUpdate.id ? { ...a, screening_decision: "undecided", screening_decision_by: undefined } : a
+          a.id === articleToUpdate.id ? { ...a, screening_decision: undefined, screening_decision_by: undefined } : a
         )
       );
       toast.error(e?.message || "Failed to update");
@@ -573,6 +622,22 @@ export default function ScreeningPage() {
                                 {screeningStats.total.toLocaleString()}
                               </span>
                             </button>
+                            {screeningStats.conflicts > 0 && (
+                              <button
+                                onClick={() => { setDecisionFilter("conflicts"); setShowStatsPopup(false); }}
+                                className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg transition-colors ${
+                                  decisionFilter === "conflicts" ? "bg-orange-50 ring-1 ring-orange-300 dark:bg-orange-900/20" : "bg-[var(--surface-2)] hover:bg-[var(--surface-3)]"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                                  <span className="text-xs text-[var(--text-secondary)]">Conflicts</span>
+                                </div>
+                                <span className="text-xs font-semibold tabular-nums text-orange-500">
+                                  {screeningStats.conflicts.toLocaleString()}
+                                </span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       </>
@@ -623,54 +688,45 @@ export default function ScreeningPage() {
                           
                           {/* Decision + Username + Badges Row */}
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {/* Decision Icon + Username */}
-                            {a.screening_decision && a.screening_decision !== "undecided" && a.screening_decision_by ? (
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setArticleDecisionPopup(a.id);
-                                }}
-                                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setArticleDecisionPopup(a.id); } }}
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold cursor-pointer hover:opacity-80"
-                                style={{
-                                  background: a.screening_decision === "included" ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
-                                  color: a.screening_decision === "included" ? "rgba(34,197,94,0.95)" : "rgba(239,68,68,0.95)",
-                                }}
-                                title={`${a.screening_decision} by ${a.screening_decision_by}`}
-                              >
-                                {a.screening_decision === "included" ? (
-                                  <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                ) : (
-                                  <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                )}
-                                <span>{a.screening_decision_by}</span>
-                              </span>
-                            ) : a.screening_decision === "undecided" && a.screening_decision_by ? (
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setArticleDecisionPopup(a.id);
-                                }}
-                                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setArticleDecisionPopup(a.id); } }}
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold cursor-pointer hover:opacity-80"
-                                style={{
-                                  background: "rgba(245,158,11,0.14)",
-                                  color: "rgba(245,158,11,0.95)",
-                                }}
-                                title={`Confused by ${a.screening_decision_by}`}
-                              >
-                                <span className="text-xs font-bold leading-none">?</span>
-                                <span>{a.screening_decision_by}</span>
-                              </span>
-                            ) : null}
+                            {(() => {
+                              // Collect unique badges by user_name
+                              const seen = new Set<string>();
+                              const badges: { user_name: string; decision: string }[] = [];
+                              
+                              if (a.screenings && a.screenings.length > 0) {
+                                a.screenings.forEach(s => {
+                                  // Only use entries where user_name is actually set (blind mode OFF)
+                                  if (s.user_name && !seen.has(s.user_name)) {
+                                    seen.add(s.user_name);
+                                    badges.push({ user_name: s.user_name, decision: s.decision });
+                                  }
+                                });
+                              }
+                              
+                              // Fallback: if screenings gave no named badges, use top-level field (current user's own decision)
+                              if (badges.length === 0 && a.screening_decision && a.screening_decision_by) {
+                                badges.push({ user_name: a.screening_decision_by, decision: a.screening_decision });
+                              }
+                              
+                              return badges.map((s, si) =>
+                                s.decision === "included" ? (
+                                  <span key={si} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: "rgba(34,197,94,0.12)", color: "rgba(34,197,94,0.95)" }} title={`included by ${s.user_name}`}>
+                                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                    <span>{s.user_name}</span>
+                                  </span>
+                                ) : s.decision === "excluded" ? (
+                                  <span key={si} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: "rgba(239,68,68,0.12)", color: "rgba(239,68,68,0.95)" }} title={`excluded by ${s.user_name}`}>
+                                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                    <span>{s.user_name}</span>
+                                  </span>
+                                ) : s.decision === "undecided" ? (
+                                  <span key={si} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: "rgba(245,158,11,0.14)", color: "rgba(245,158,11,0.95)" }} title={`confused by ${s.user_name}`}>
+                                    <span className="font-bold leading-none">?</span>
+                                    <span>{s.user_name}</span>
+                                  </span>
+                                ) : null
+                              );
+                            })()}
                             
                             {/* Exclusion Reasons */}
                             {a.exclusion_reasons && a.exclusion_reasons.length > 0 && a.exclusion_reasons.map((reason, i) => (
@@ -782,6 +838,87 @@ export default function ScreeningPage() {
 
           {/* Article Content */}
           <main className="flex-1 overflow-y-auto p-6">
+            {/* Team Decisions Panel - shown when blind mode OFF and article has screenings from any user */}
+            {currentArticle && currentArticle.screenings && currentArticle.screenings.filter(s => s.user_name).length > 0 && (() => {
+              const namedScreenings = currentArticle.screenings!.filter(s => s.user_name);
+              const decisions = new Set(namedScreenings.map(s => s.decision));
+              const isConflict = namedScreenings.length >= 2 && decisions.size > 1;
+              return (
+                <div className={`mb-6 rounded-xl border-2 overflow-hidden ${isConflict ? "border-orange-300 dark:border-orange-700" : "border-[var(--border-subtle)]"}`} style={{ background: "var(--surface-1)" }}>
+                  <div className="px-4 py-2.5 flex items-center gap-2" style={{ background: isConflict ? "rgba(249,115,22,0.08)" : "var(--surface-2)", borderBottom: "1px solid var(--border-subtle)" }}>
+                    {isConflict ? (
+                      <>
+                        <svg className="w-3.5 h-3.5 text-orange-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">Conflict — reviewers disagree</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5 shrink-0" style={{ color: "var(--text-muted)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Team Decisions</span>
+                      </>
+                    )}
+                  </div>
+                  <div className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
+                    {namedScreenings.map((s, i) => (
+                      <div key={i} className="px-4 py-3">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+                            style={{ background: s.decision === "included" ? "rgba(34,197,94,0.8)" : s.decision === "excluded" ? "rgba(239,68,68,0.8)" : "rgba(245,158,11,0.8)" }}>
+                            {s.user_name![0].toUpperCase()}
+                          </div>
+                          <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{s.user_name}</span>
+                          {s.decision === "included" && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: "rgba(34,197,94,0.12)", color: "rgba(34,197,94,0.95)" }}>
+                              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                              Included
+                            </span>
+                          )}
+                          {s.decision === "excluded" && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: "rgba(239,68,68,0.12)", color: "rgba(239,68,68,0.95)" }}>
+                              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                              Excluded
+                            </span>
+                          )}
+                          {s.decision === "undecided" && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: "rgba(245,158,11,0.14)", color: "rgba(245,158,11,0.95)" }}>
+                              <span className="font-bold text-xs">?</span>
+                              Undecided
+                            </span>
+                          )}
+                        </div>
+                        {s.notes && (
+                          <div className="ml-7 mb-1 flex items-start gap-1.5">
+                            <svg className="w-3 h-3 mt-0.5 shrink-0" style={{ color: "var(--accent)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                            </svg>
+                            <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{s.notes}</span>
+                          </div>
+                        )}
+                        {s.labels && s.labels.length > 0 && (
+                          <div className="ml-7 mb-1 flex flex-wrap gap-1">
+                            {s.labels.map((label, li) => (
+                              <span key={li} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: "var(--accent-soft)", border: "1px solid var(--accent-border)", color: "var(--accent-light)" }}>{label}</span>
+                            ))}
+                          </div>
+                        )}
+                        {s.exclusion_reasons && s.exclusion_reasons.length > 0 && (
+                          <div className="ml-7 flex flex-wrap gap-1">
+                            {s.exclusion_reasons.map((reason, ri) => (
+                              <span key={ri} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: "rgba(239,68,68,0.12)", color: "rgba(239,68,68,0.95)" }}>{reason}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {currentArticle ? (
               <ArticleDisplay
                 article={currentArticle as any}
