@@ -151,7 +151,7 @@ export default function Header({ onMenuClick, title, showTitle = true }: HeaderP
                 </svg>
               </div>
               <div className="text-center">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Logging out from {displayTitle}…</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Logging out {currentUser?.name || "User"}…</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Please wait</p>
               </div>
             </div>
