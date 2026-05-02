@@ -6,7 +6,7 @@ import type {
   Duplicate,
 } from '../types/duplicate';
 
-const API_BASE_URL = 'https://backend-of-research-nexus-ai.free.laravel.cloud';
+const API_BASE_URL = 'http://localhost:8000';
 
 // API Client with authentication
 class ApiClient {
@@ -60,11 +60,15 @@ class ApiClient {
     const headers = this.getHeaders(includeAuth);
     const url = `${this.baseUrl}${endpoint}`;
     
+    const token = this.getToken();
     console.log(`API Request: ${options.method || 'GET'} ${url}`);
+    console.log(`Token: ${token ? token.substring(0, 20) + '...' : 'NO TOKEN'}`);
+    console.log(`Headers:`, headers);
     
     try {
       const response = await fetch(url, {
         ...options,
+        credentials: 'include',
         headers: {
           ...headers,
           ...options.headers,
@@ -79,25 +83,8 @@ class ApiClient {
 
         // Handle 401 Unauthorized - token expired or invalid
         if (response.status === 401) {
-          // If this is a login request, show specific error
-          if (endpoint === '/login') {
-            const errorMessage = error.message || 
-                               error.errors?.password?.[0] || 
-                               'The password you entered is incorrect.';
-            throw new Error(errorMessage);
-          }
-          
-          // For review member checks, don't redirect - just throw error
-          if (endpoint.includes('/members') || endpoint.includes('/accept')) {
-            throw new Error('Unauthorized');
-          }
-          
-          // For other requests, token is invalid - clear and redirect to login
-          this.removeToken();
-          if (typeof window !== 'undefined') {
-            window.location.href = '/login';
-          }
-          throw new Error('Session expired. Please login again.');
+          const errorMessage = error.message || 'Unauthorized';
+          throw new Error(errorMessage);
         }
 
         // Handle 404 Not Found (user doesn't exist)
@@ -149,7 +136,7 @@ class ApiClient {
       user: any;
       token: string;
       token_type: string;
-    }>('/register', {
+    }>('/api/register', {
       method: 'POST',
       body: JSON.stringify(data),
     }, false);
@@ -166,7 +153,7 @@ class ApiClient {
       user: any;
       token: string;
       token_type: string;
-    }>('/login', {
+    }>('/api/login', {
       method: 'POST',
       body: JSON.stringify(data),
     }, false);
@@ -180,25 +167,25 @@ class ApiClient {
 
   async logout() {
     try {
-      await this.request('/logout', { method: 'POST' });
+      await this.request('/api/logout', { method: 'POST' });
     } finally {
       this.removeToken();
     }
   }
 
   async getCurrentUser() {
-    return this.request<any>('/user');
+    return this.request<any>('/api/user');
   }
 
   // Review Methods
   async getReviews() {
-    const response = await this.request<any>('/reviews');
+    const response = await this.request<any>('/api/reviews');
     // Handle paginated response
     return response.data || response;
   }
 
   async getReview(id: number) {
-    return this.request<any>(`/reviews/${id}`);
+    return this.request<any>(`/api/reviews/${id}`);
   }
 
   async createReview(data: {
@@ -207,7 +194,7 @@ class ApiClient {
     domain: string;
     description?: string;
   }) {
-    const response = await this.request<any>('/reviews', {
+    const response = await this.request<any>('/api/reviews', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -216,33 +203,33 @@ class ApiClient {
   }
 
   async updateReview(id: number, data: Partial<any>) {
-    return this.request<any>(`/reviews/${id}`, {
+    return this.request<any>(`/api/reviews/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
   async deleteReview(id: number) {
-    return this.request<{ message: string }>(`/reviews/${id}`, {
+    return this.request<{ message: string }>(`/api/reviews/${id}`, {
       method: 'DELETE',
     });
   }
 
   async getReviewSummary(id: number) {
-    return this.request<any>(`/reviews/${id}/summary`);
+    return this.request<any>(`/api/reviews/${id}/summary`);
   }
 
   // Article Methods
   async getArticles(reviewId: number, page: number = 1, perPage: number = 100) {
-    return this.request<any>(`/reviews/${reviewId}/articles?page=${page}&per_page=${perPage}`);
+    return this.request<any>(`/api/reviews/${reviewId}/articles?page=${page}&per_page=${perPage}`);
   }
 
   async getArticle(id: number) {
-    return this.request<any>(`/articles/${id}`);
+    return this.request<any>(`/api/articles/${id}`);
   }
 
   async createArticle(reviewId: number, data: FormData) {
-    const url = `${this.baseUrl}/reviews/${reviewId}/articles`;
+    const url = `${this.baseUrl}/api/reviews/${reviewId}/articles`;
     const headers: HeadersInit = {
       'Accept': 'application/json',
     };
@@ -277,7 +264,7 @@ class ApiClient {
   }
 
   async updateArticle(id: number, data: Partial<any>) {
-    return this.request<any>(`/articles/${id}`, {
+    return this.request<any>(`/api/articles/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -293,7 +280,7 @@ class ApiClient {
       exclusion_reasons?: string[];
     }
   ) {
-    return this.request<any>(`/articles/${id}/screening`, {
+    return this.request<any>(`/api/articles/${id}/screening`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -305,11 +292,11 @@ class ApiClient {
       undecided: number;
       included: number;
       excluded: number;
-    }>(`/reviews/${reviewId}/articles/screening-stats`);
+    }>(`/api/reviews/${reviewId}/articles/screening-stats`);
   }
 
   async detectDuplicates(reviewId: number) {
-    return this.request<any>(`/reviews/${reviewId}/articles/detect-duplicates`, {
+    return this.request<any>(`/api/reviews/${reviewId}/articles/detect-duplicates`, {
       method: 'POST',
     });
   }
@@ -322,7 +309,7 @@ class ApiClient {
       incrementalOnly?: boolean;
     }
   ): Promise<DetectionResponse> {
-    return this.request<DetectionResponse>(`/reviews/${reviewId}/duplicates/detect`, {
+    return this.request<DetectionResponse>(`/api/reviews/${reviewId}/duplicates/detect`, {
       method: 'POST',
       body: JSON.stringify(options || {}),
     });
@@ -334,7 +321,7 @@ class ApiClient {
     perPage: number = 20,
     status?: string
   ): Promise<PaginatedDuplicates> {
-    let url = `/reviews/${reviewId}/duplicates?page=${page}&per_page=${perPage}`;
+    let url = `/api/reviews/${reviewId}/duplicates?page=${page}&per_page=${perPage}`;
     if (status) {
       url += `&status=${status}`;
     }
@@ -342,44 +329,44 @@ class ApiClient {
   }
 
   async getDuplicateCounts(reviewId: number): Promise<StatusCounts> {
-    return this.request<StatusCounts>(`/reviews/${reviewId}/duplicates/counts`);
+    return this.request<StatusCounts>(`/api/reviews/${reviewId}/duplicates/counts`);
   }
 
   async updateDuplicateStatus(duplicateId: number, status: string): Promise<Duplicate> {
-    return this.request<Duplicate>(`/duplicates/${duplicateId}/status`, {
+    return this.request<Duplicate>(`/api/duplicates/${duplicateId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
     });
   }
 
   async resolveDuplicate(duplicateId: number, keep: 'left' | 'right' | 'both'): Promise<Duplicate> {
-    return this.request<Duplicate>(`/duplicates/${duplicateId}/resolve`, {
+    return this.request<Duplicate>(`/api/duplicates/${duplicateId}/resolve`, {
       method: 'POST',
       body: JSON.stringify({ keep }),
     });
   }
 
   async markNotDuplicate(duplicateId: number): Promise<void> {
-    await this.request<any>(`/duplicates/${duplicateId}/not-duplicate`, {
+    await this.request<any>(`/api/duplicates/${duplicateId}/not-duplicate`, {
       method: 'POST',
     });
   }
 
   async deleteDuplicate(duplicateId: number): Promise<void> {
-    await this.request<{ message: string }>(`/duplicates/${duplicateId}`, {
+    await this.request<{ message: string }>(`/api/duplicates/${duplicateId}`, {
       method: 'DELETE',
     });
   }
 
   async bulkResolveDuplicates(duplicateIds: number[]): Promise<void> {
-    await this.request<{ message: string }>('/duplicates/bulk-resolve', {
+    await this.request<{ message: string }>('/api/duplicates/bulk-resolve', {
       method: 'POST',
       body: JSON.stringify({ duplicate_ids: duplicateIds }),
     });
   }
 
   async bulkLabelDuplicates(duplicateIds: number[], label: string): Promise<void> {
-    await this.request<{ message: string }>('/duplicates/bulk-label', {
+    await this.request<{ message: string }>('/api/duplicates/bulk-label', {
       method: 'POST',
       body: JSON.stringify({ duplicate_ids: duplicateIds, label }),
     });
@@ -393,21 +380,21 @@ class ApiClient {
       screening_notes?: string;
     }
   ) {
-    return this.request<any>(`/reviews/${reviewId}/articles/bulk-update`, {
+    return this.request<any>(`/api/reviews/${reviewId}/articles/bulk-update`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
   async deleteArticle(id: number) {
-    return this.request<{ message: string }>(`/articles/${id}`, {
+    return this.request<{ message: string }>(`/api/articles/${id}`, {
       method: 'DELETE',
     });
   }
 
   // Screening Criteria Methods
   async getScreeningCriteria(reviewId: number) {
-    return this.request<any[]>(`/reviews/${reviewId}/criteria`);
+    return this.request<any[]>(`/api/reviews/${reviewId}/criteria`);
   }
 
   async createScreeningCriteria(
@@ -418,21 +405,21 @@ class ApiClient {
       description?: string;
     }
   ) {
-    return this.request<any>(`/reviews/${reviewId}/criteria`, {
+    return this.request<any>(`/api/reviews/${reviewId}/criteria`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
   async updateScreeningCriteria(id: number, data: Partial<any>) {
-    return this.request<any>(`/criteria/${id}`, {
+    return this.request<any>(`/api/criteria/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
   async deleteScreeningCriteria(id: number) {
-    return this.request<{ message: string }>(`/criteria/${id}`, {
+    return this.request<{ message: string }>(`/api/criteria/${id}`, {
       method: 'DELETE',
     });
   }
@@ -440,7 +427,7 @@ class ApiClient {
   // Team Member Methods
   async getTeamMembers(reviewId: number) {
     try {
-      const response = await this.request<any>(`/reviews/${reviewId}/members`);
+      const response = await this.request<any>(`/api/reviews/${reviewId}/members`);
       // Handle both paginated and non-paginated responses
       return Array.isArray(response) ? response : response.data || [];
     } catch (error: any) {
@@ -459,7 +446,7 @@ class ApiClient {
     reviewId: number,
     data: { email: string; role: string; message?: string }
   ) {
-    return this.request<any>(`/reviews/${reviewId}/invite`, {
+    return this.request<any>(`/api/reviews/${reviewId}/invite`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -467,7 +454,7 @@ class ApiClient {
 
   async removeTeamMember(reviewId: number, memberId: number) {
     return this.request<{ message: string }>(
-      `/reviews/${reviewId}/members/${memberId}`,
+      `/api/reviews/${reviewId}/members/${memberId}`,
       { method: 'DELETE' }
     );
   }

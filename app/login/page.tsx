@@ -27,6 +27,8 @@ export default function LoginPage() {
         email: email.toLowerCase().trim(), 
         password 
       });
+      // Small delay to ensure token is saved
+      await new Promise(resolve => setTimeout(resolve, 100));
       router.push("/reviews");
     } catch (err: any) {
       // Handle specific error messages
